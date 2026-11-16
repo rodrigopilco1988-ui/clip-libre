@@ -29,3 +29,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\.venv\Scripts\python.exe -m pip check
           exit $LASTEXITCODE
+      - name: RepararGPU.bat y carga real de DLL NVIDIA en Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmd /d /c "RepararGPU.bat --sin-pausa"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\.venv\Scripts\python.exe -m cliplivre.gpu_runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\.venv\Scripts\python.exe -m pip check
+          exit $LASTEXITCODE

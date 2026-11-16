@@ -34,7 +34,14 @@ def audio(path, start, duration, rate=16000):
     return np.frombuffer(raw, dtype=np.float32).copy()
 
 def preview(path, start, end, output):
-    run(['ffmpeg', '-v', 'error', '-y', '-ss', start, '-i', path, '-t', end-start,
-         '-vf', 'scale=640:-2', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27',
-         '-c:a', 'aac', '-movflags', '+faststart', output])
-    return Path(output)
+    import uuid
+    output=Path(output)
+    temp=output.with_name(output.stem+'.'+uuid.uuid4().hex+'.building.mp4')
+    try:
+        run(['ffmpeg', '-v', 'error', '-y', '-threads', '2', '-ss', start, '-i', path, '-t', end-start,
+             '-vf', 'scale=640:-2,fps=24', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27',
+             '-c:a', 'aac', '-movflags', '+faststart', temp])
+        temp.replace(output)
+        return output
+    finally:
+        temp.unlink(missing_ok=True)

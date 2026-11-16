@@ -34,3 +34,14 @@ def test_invalid_render(video,tmp_path):
     with pytest.raises(ValueError): render(video,0,99,[],tmp_path)
     with pytest.raises(ValueError): dimensions('2:3',1080)
     assert 'if(' in face_expression([dict(time=0,faces=[[.1,.1,.1,.1]]),dict(time=1,faces=[[.5,.1,.1,.1]])],[(0,2)],1080)
+
+
+def test_preview_failure_does_not_cache_partial_file(tmp_path,monkeypatch):
+    from pathlib import Path
+    from cliplivre import media
+    def fail(args,**kwargs):
+        Path(args[-1]).write_bytes(b'partial')
+        raise media.MediaError('fallo controlado')
+    monkeypatch.setattr(media,'run',fail)
+    with pytest.raises(media.MediaError): media.preview('source.mp4',0,1,tmp_path/'preview.mp4')
+    assert not list(tmp_path.glob('*.mp4'))

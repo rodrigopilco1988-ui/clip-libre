@@ -48,3 +48,16 @@ def test_home_source_choices(tmp_path,monkeypatch):
     next(x for x in app.radio if x.label=='¿De dónde viene tu contenido?').set_value('Twitch').run()
     assert not app.exception
     assert any('Pega el enlace' in x.label for x in app.text_input)
+
+
+def test_view_clip_button_and_persistent_open_state(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'view-regression'))
+    s=Store(tmp_path/'view-regression'); sid=s.register(video)
+    s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),[dict(start=1.,end=4.,score=60,title='Clip de prueba',reason='Prueba',classification='heurística',visual_samples=1,words=[])])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(b for b in app.button if b.label=='Ver clip').click().run(timeout=30)
+    assert not app.exception and not app.error
+    assert list((tmp_path/'view-regression'/'vistas_previas').glob('*.mp4'))
+    next(x for x in app.slider if x.label=='Puntuación mínima').set_value(10).run(timeout=30)
+    assert not app.exception and not app.error

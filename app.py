@@ -64,6 +64,38 @@ with st.sidebar:
         st.write(str(ROOT))
         st.caption('Originales, clips editados y subtítulos en carpetas separadas. Los modelos se descargan la primera vez.')
 
+def gpu_controls():
+    with st.expander('Preparar mi tarjeta NVIDIA para acelerar el análisis'):
+        st.write('Si la aplicación pasó a CPU por una biblioteca ausente, instala el soporte NVIDIA una vez. La descarga puede superar 1,3 GB y requiere espacio libre. Son componentes gratuitos del fabricante, opcionales para usar la app.')
+        if st.button('Instalar o reparar soporte NVIDIA',key='repair_gpu'):
+            try:
+                import sys
+                from cliplivre.media import run
+                with st.status('Descargando y comprobando soporte NVIDIA…',expanded=True) as status:
+                    run([sys.executable,'-m','cliplivre.gpu_runtime','install'],timeout=3600)
+                    status.update(label='Bibliotecas cargadas. Cierra y vuelve a abrir la aplicación; después elige auto.',state='complete')
+                st.info('La instalación no demuestra que la GPU esté procesando. Al analizar se mostrará el dispositivo utilizado. Puede ser necesario actualizar el controlador NVIDIA.')
+            except Exception as e: st.error(str(e))
+        if st.button('Probar transcripción en GPU',key='probe_gpu'):
+            try:
+                import sys
+                from cliplivre.media import run
+                with st.spinner('Probando la GPU con Tiny; la primera vez puede descargar el modelo…'):
+                    result=json.loads(run([sys.executable,'-m','cliplivre.gpu_runtime','probe'],timeout=900))
+                if result.get('device')!='cuda' or not result.get('inference_completed'):
+                    raise RuntimeError('No se confirmó inferencia CUDA.')
+                from cliplivre.gpu_runtime import prepare_libraries
+                from cliplivre import transcribe
+                prepare_libraries(); transcribe._CUDA_FAILURE=None
+                st.success('La prueba de transcripción sí usó la GPU. Ya puedes analizar con auto.')
+            except Exception as e:
+                st.error('La GPU no superó la prueba. '+str(e))
+                st.write('Instala el soporte anterior y comprueba tu controlador desde https://www.nvidia.com/drivers/ .')
+        if st.button('Ver diagnóstico de la GPU',key='diagnose_gpu'):
+            from cliplivre.gpu_runtime import prepare_libraries
+            from cliplivre import transcribe
+            st.json(dict(libraries=prepare_libraries(),last_cuda_error=transcribe._CUDA_FAILURE))
+
 tabs=st.tabs(['1 · Crear clips','2 · Configurar análisis','3 · Mis clips','4 · Editor y exportación'])
 with tabs[0]:
     st.markdown('<span class="cl-pill">DE CONTENIDO LARGO A CLIPS CORTOS</span>',unsafe_allow_html=True)
@@ -112,7 +144,7 @@ with tabs[0]:
         automatic=st.toggle('Generar clips automáticamente al importar',value=True)
         with st.expander('Ajustes de creación'):
             a,b=st.columns(2)
-            initial_model=a.selectbox('Calidad de transcripción',['small','tiny','base','medium'])
+            initial_model=a.selectbox('Calidad de transcripción',['small','tiny','base','medium'],format_func=lambda m:{'tiny':'Tiny · más rápido','base':'Base · ligero','small':'Small · equilibrado','medium':'Medium · más lento'}[m])
             initial_language=b.selectbox('Idioma del contenido',['es','en','auto'])
             st.caption('Small ofrece equilibrio. Tiny reduce el tiempo de espera. Se procesa un primer bloque de hasta 50 minutos; puedes continuar desde Configurar análisis.')
         if st.button('Crear clips' if automatic else 'Importar contenido',type='primary',disabled=not permission,width='stretch'):
@@ -151,6 +183,7 @@ with tabs[0]:
     if st.session_state.get('import_notice'): st.success(st.session_state.pop('import_notice'))
     for warning in st.session_state.pop('import_warnings',[]): st.warning(warning)
     st.caption('1. Añade contenido   →   2. Genera clips   →   3. Revisa y edita   →   4. Exporta')
+    gpu_controls()
 
 if sid:
     source=store.source(sid); metadata=probe(source['path'])
@@ -158,7 +191,7 @@ if sid:
         st.subheader('Análisis incremental')
         st.write(f"Duración: {metadata['duration']/60:.1f} min · {metadata['width']} × {metadata['height']}")
         a,b,c=st.columns(3)
-        model=a.selectbox('Modelo Whisper',['tiny','base','small','medium'],index=2)
+        model=a.selectbox('Modelo Whisper',['tiny','base','small','medium'],index=2,format_func=lambda m:{'tiny':'Tiny · más rápido','base':'Base · ligero','small':'Small · equilibrado','medium':'Medium · más lento'}[m])
         device=b.selectbox('Procesador',['auto','cpu','cuda'])
         st.caption('Auto usa la GPU si funciona. Si falta una biblioteca o falla CUDA, se continúa en CPU automáticamente y se conserva el progreso.')
         block=c.number_input('Minutos por bloque',min_value=1,max_value=120,value=50)
@@ -202,8 +235,8 @@ if sid:
                     st.subheader(item['title'])
                     st.caption(f"{item['start']:.1f}–{item['end']:.1f} s · {item['end']-item['start']:.0f} segundos · {item['state']}")
                     st.write(item['reason'])
-                    if st.button('Ver clip',key='view'+item['id']): st.session_state['view'+item['id']]=True
-                    if st.session_state.get('view'+item['id']): show_clip(source['path'],item['start'],item['end'])
+                    if st.button('Ver clip',key='view_button_'+item['id']): st.session_state['view_open_'+item['id']]=True
+                    if st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
                     a,b=st.columns(2)
                     if a.button('Aceptar',key='accept'+item['id']): store.update(item['id'],state='aceptado'); st.rerun()
                     if b.button('Descartar',key='reject'+item['id']): store.update(item['id'],state='descartado'); st.rerun()

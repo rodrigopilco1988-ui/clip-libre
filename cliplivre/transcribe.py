@@ -5,12 +5,14 @@ _CUDA_FAILURE = None
 
 
 def _once(samples, model, device, language):
+    from .gpu_runtime import prepare_libraries
+    if device=='cuda': prepare_libraries()
     from faster_whisper import WhisperModel
     engine = None
     segments = None
     try:
         engine = WhisperModel(model, device=device, compute_type='int8_float16' if device=='cuda' else 'int8')
-        segments, info = engine.transcribe(samples, language=language or None, word_timestamps=True, vad_filter=True, beam_size=3)
+        segments, info = engine.transcribe(samples, language=language or None, word_timestamps=True, vad_filter=True, beam_size=1 if device=='cpu' else 3)
         result=[]
         # Whisper es perezoso: una DLL puede fallar al iterar, no al construir.
         for s in segments:
@@ -48,6 +50,8 @@ def transcribe(samples, model='small', device='auto', language=None, progress=la
             warning='La GPU no está disponible en esta sesión. Se continúa en CPU.'
         else:
             try:
+                from .gpu_runtime import prepare_libraries
+                prepare_libraries()
                 import ctranslate2
                 use_cuda=device=='cuda' or ctranslate2.get_cuda_device_count()>0
             except Exception as e:
