@@ -1,4 +1,4 @@
-# Clip Libre · 0.1.1
+# Clip Libre · 0.1.2
 
 Aplicación local nueva para convertir videos en clips revisables. Interfaz propia en español, sin servicios de IA de pago. Primera entrega funcional; no equivale todavía a todas las capacidades de un editor comercial.
 
@@ -47,3 +47,7 @@ El video de prueba fue generado localmente con FFmpeg testsrc2 y voz Flite, con 
 Código nuevo bajo MIT. Dependencias y modelos tienen sus licencias independientes: `docs/LICENCIAS.md`. No se distribuyen FFmpeg, Ollama, Python, CUDA ni pesos de modelos dentro del ZIP. La instalación y descarga inicial requieren internet; los proveedores pueden cambiar disponibilidad o condiciones.
 
 Para desarrollo: crea un entorno virtual e instala `pip install -r requirements.txt`, luego `python -m streamlit run app.py --server.address 127.0.0.1 --browser.gatherUsageStats false`.
+
+## Si aparece «No runtime installed that matches 3.12»
+
+El lanzador `py` está instalado pero no encuentra un intérprete compatible. Instala Python 3.12 de 64 bits desde python.org, marca **Add python.exe to PATH**, completa la instalación y vuelve a abrir `Instalar.bat`. No hace falta instalar Python 3.11 además. La versión 0.1.2 comprueba que el intérprete realmente se ejecuta, permite usar Python del PATH sin depender de `py`, y no continúa hacia una ruta `.venv` inexistente. Si conserva un entorno incompleto, renombra únicamente `.venv` como `.venv-anterior` y vuelve a instalar; conserva `data/`.

@@ -21,3 +21,11 @@ jobs:
         run: choco install ffmpeg -y --no-progress
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest -q
+      - name: Instalar.bat real sin pausa en Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmd /d /c "Instalar.bat --sin-pausa"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\.venv\Scripts\python.exe -m pip check
+          exit $LASTEXITCODE
