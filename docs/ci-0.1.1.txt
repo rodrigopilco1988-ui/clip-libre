@@ -1,0 +1,6 @@
+GitHub Actions: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43962614502
+Commit: 43a0dde469e436d39641947f0cdb29c0b6acd75c
+Resultado: success (Windows y Linux)
+
+tests (windows-latest)	Run python -m pytest -q	2026-11-16T21:43:16.4133174Z 23 passed in 10.95s
+tests (ubuntu-latest)	Run python -m pytest -q	2026-11-16T21:42:28.1577491Z 23 passed in 9.00s

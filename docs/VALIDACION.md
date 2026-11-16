@@ -2,7 +2,7 @@
 
 ## Entorno real
 
-Linux x86_64, Python 3.12.14, FFmpeg del entorno (`ffmpeg-validado.txt`), sin GPU CUDA detectable (CTranslate2 devolvió 0 dispositivos). Dependencias exactas instaladas en `entorno-validado.txt`. No se ejecutó Windows ni una RTX 3060. Los tiempos no son extrapolables a ese hardware.
+Linux x86_64, Python 3.12.14, FFmpeg del entorno (`ffmpeg-validado.txt`), sin GPU CUDA detectable (CTranslate2 devolvió 0 dispositivos). Dependencias exactas instaladas en `entorno-validado.txt`. El entorno local no dispone de Windows ni de una RTX 3060; la validación adicional en Windows Server mediante GitHub Actions se documenta al final. Los tiempos no son extrapolables a ese hardware.
 
 ## Pruebas automatizadas
 
@@ -46,7 +46,7 @@ El MP4 se volvió a abrir con FFprobe y se extrajo un fotograma para inspección
 
 ## Sin validar o sin implementar por completo
 
-- Windows, scripts BAT en Windows, CUDA/cuDNN, RTX 3060, NVENC (no se utiliza).
+- Scripts BAT interactivos en Windows, CUDA/cuDNN, RTX 3060, NVENC (no se utiliza).
 - Inferencia real con Small/Base/Medium y Ollama Qwen3 4B.
 - Captura o recuperación real de YouTube/Twitch, DVR y VOD; no se declara compatibilidad operativa validada.
 - Videos de varias horas, consumo conjunto de todos los procesos y rendimiento con carga GPU real.
@@ -67,4 +67,4 @@ La matriz de CI se ejecuta en GitHub Actions para Linux y Windows. Sus resultado
 
 ## Corrección 0.1.1 para Windows
 
-La primera ejecución de Actions (43962091397) aprobó Linux y detectó seis fallos en Windows: cinco por la eliminación de `-filter_complex_script` en el FFmpeg reciente del runner y uno por lectura de ASS sin codificación explícita en una prueba. Se añade selección compatible entre el parámetro antiguo y `-/filter_complex`; la prueba lee UTF-8 explícitamente. La nueva ejecución debe confirmar los resultados antes de declarar la corrección validada.
+La primera ejecución de Actions (43962091397) aprobó Linux y detectó seis fallos en Windows: cinco por la eliminación de `-filter_complex_script` en el FFmpeg reciente del runner y uno por lectura de ASS sin codificación explícita en una prueba. Se añade selección compatible entre el parámetro antiguo y `-/filter_complex`; la prueba lee UTF-8 explícitamente. La ejecución de la corrección aprobó las 23 pruebas en ambos sistemas: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43962614502 . Commit de código probado: `43a0dde469e436d39641947f0cdb29c0b6acd75c`. Incluye exportaciones reales con FFmpeg y vista previa/exportación desde Streamlit AppTest. Esta prueba usa el runner Windows de GitHub, no la máquina del usuario ni su GPU. La instalación de dependencias se hizo con pip en CI; no se probaron los BAT interactivos. La salida de resumen se conserva en `ci-0.1.1.txt`.

@@ -23,4 +23,4 @@ Proyecto nuevo e independiente. Python 3.11/3.12 y Streamlit sirven la interfaz 
 
 ## Trabajo pendiente para una edición completa
 
-Validación en Windows y RTX 3060, servicio Ollama real con Qwen3 4B, modelos Small/Medium, videos largos y concurrencia; pruebas autorizadas en YouTube/Twitch; captura incremental persistente de directos, detector de personas y hablante activo, seguimiento robusto y editor multipista. Cada avance requiere pruebas específicas y actualización del estado de validación.
+Validación de instalación interactiva en Windows y de RTX 3060, servicio Ollama real con Qwen3 4B, modelos Small/Medium, videos largos y concurrencia; pruebas autorizadas en YouTube/Twitch; captura incremental persistente de directos, detector de personas y hablante activo, seguimiento robusto y editor multipista. Cada avance requiere pruebas específicas y actualización del estado de validación.
