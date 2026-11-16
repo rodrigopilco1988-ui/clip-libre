@@ -55,4 +55,12 @@ El MP4 se volvió a abrir con FFprobe y se extrajo un fotograma para inspección
 
 ## Entrega
 
-El repositorio y el ZIP se preparan en el entorno. La ruta de salida prevista para adjuntar archivos en el cliente está montada como solo lectura y no se pudo crear. Tampoco se ofrecen herramientas de publicación de archivos, GitHub ni vista previa de puertos/desktop en esta sesión. Por ello no se afirma que exista una descarga pública o accesible desde el chat. Una entrega verificable por GitHub requiere seleccionar un repositorio y disponer de acceso de escritura; se debe publicar un commit identificable, un ZIP de Release y su SHA-256 y verificar la descarga real.
+El primer intento de adjuntar el ZIP en el chat no pudo utilizar la ruta de salida del cliente porque estaba montada como solo lectura. Posteriormente se conectó GitHub y el usuario proporcionó el repositorio de destino.
+
+Código: https://github.com/rodrigopilco1988-ui/clip-libre
+
+Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.1.0
+
+La Release contiene el ZIP de código, documentación y ejemplos, además de `SHA256SUMS.txt`. El checksum se publica por separado para evitar una referencia circular dentro del ZIP. La existencia y descarga de esos adjuntos debe comprobarse al publicar. El ZIP no contiene entornos virtuales, pesos de modelos, ejecutables externos ni la base de datos con rutas de esta máquina.
+
+La matriz de CI se ejecuta en GitHub Actions para Linux y Windows. Sus resultados son adicionales a las 23 pruebas locales documentadas arriba; no validan GPU, scripts BAT interactivos, fuentes remotas ni calidad de seguimiento sobre personas reales. Consulta el estado real en https://github.com/rodrigopilco1988-ui/clip-libre/actions .
