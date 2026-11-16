@@ -33,7 +33,7 @@ def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcri
     cursor=0.
     for row in done:
         if row['start']<=cursor+.01: cursor=max(cursor,row['end'])
-    session=uuid.uuid4().hex; started=time.perf_counter(); warnings=[]; blocks=0
+    session=uuid.uuid4().hex; started=time.perf_counter(); warnings=[]; blocks=0; devices=[]
     memory=psutil.Process().memory_info().rss
     store.job(session,sid,'procesando','Iniciando análisis')
     try:
@@ -42,8 +42,15 @@ def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcri
             progress(cursor/info['duration'],f'Transcribiendo {cursor/60:.1f}–{end/60:.1f} min')
             samples=media.audio(source['path'],cursor,end-cursor) if info['audio'] else []
             if len(samples):
-                segments,metadata=(transcriber or transcribe.transcribe)(samples,config.model,config.device,config.language)
+                if transcriber:
+                    segments,metadata=transcriber(samples,config.model,config.device,config.language)
+                else:
+                    segments,metadata=transcribe.transcribe(samples,config.model,config.device,config.language,progress=lambda m:progress(cursor/info['duration'],m))
             else: segments,metadata=[],dict(device='sin audio')
+            actual=metadata.get('device','desconocido')
+            if actual not in devices: devices.append(actual)
+            note=metadata.get('warning')
+            if note and note not in warnings: warnings.append(note)
             for s in segments:
                 s['start']+=cursor; s['end']+=cursor
                 for w in s.get('words',[]): w['start']+=cursor; w['end']+=cursor
@@ -60,7 +67,7 @@ def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcri
             del samples
             cursor=end; blocks+=1
             progress(cursor/info['duration'],f'Bloque guardado: {cursor/60:.1f} min')
-        report=dict(session=session,blocks=blocks,processed_until=cursor,elapsed_seconds=round(time.perf_counter()-started,3),rss_sampled_mb=round(memory/1024**2,1),warnings=warnings,config=asdict(config))
+        report=dict(session=session,blocks=blocks,processed_until=cursor,elapsed_seconds=round(time.perf_counter()-started,3),rss_sampled_mb=round(memory/1024**2,1),warnings=warnings,devices=devices,config=asdict(config))
         store.job(session,sid,'completado',json.dumps(report,ensure_ascii=False))
         return report
     except Exception as e:

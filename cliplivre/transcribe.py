@@ -1,26 +1,76 @@
 import gc
 
 MODELS = ['tiny','base','small','medium']
+_CUDA_FAILURE = None
 
-def transcribe(samples, model='small', device='auto', language=None):
-    if model not in MODELS:
-        raise ValueError('Modelo Whisper no permitido.')
+
+def _once(samples, model, device, language):
     from faster_whisper import WhisperModel
-    import ctranslate2
-    gpu = ctranslate2.get_cuda_device_count() > 0 if device == 'auto' else device == 'cuda'
-    actual = 'cuda' if gpu else 'cpu'
     engine = None
+    segments = None
     try:
-        engine = WhisperModel(model, device=actual, compute_type='int8_float16' if gpu else 'int8')
+        engine = WhisperModel(model, device=device, compute_type='int8_float16' if device=='cuda' else 'int8')
         segments, info = engine.transcribe(samples, language=language or None, word_timestamps=True, vad_filter=True, beam_size=3)
-        result = []
+        result=[]
+        # Whisper es perezoso: una DLL puede fallar al iterar, no al construir.
         for s in segments:
             result.append(dict(start=float(s.start),end=float(s.end),text=s.text.strip(),
                 words=[dict(start=float(w.start),end=float(w.end),text=w.word.strip()) for w in (s.words or [])]))
-        return result, dict(device=actual, language=info.language)
-    except Exception as e:
-        raise RuntimeError(f'No se pudo transcribir en {actual}: {e}. En CUDA revisa CUDA/cuDNN o elige CPU.') from e
+        return result, dict(device=device,language=info.language)
     finally:
+        if segments is not None:
+            close=getattr(segments,'close',None)
+            if close:
+                try: close()
+                except Exception: pass
+            del segments
         if engine is not None:
+            backend=getattr(engine,'model',None)
+            unload=getattr(backend,'unload_model',None)
+            if unload:
+                try: unload()
+                except Exception: pass
+            del backend
             del engine
-        gc.collect()  # Se libera Whisper antes de pedir clasificación a Ollama.
+        gc.collect()
+
+
+def transcribe(samples, model='small', device='auto', language=None, progress=lambda message:None):
+    global _CUDA_FAILURE
+    if model not in MODELS:
+        raise ValueError('Modelo Whisper no permitido.')
+    if device not in {'auto','cpu','cuda'}:
+        raise ValueError('Procesador no permitido.')
+    warning=None
+    use_cuda=False
+    if device!='cpu':
+        if _CUDA_FAILURE:
+            warning='La GPU no está disponible en esta sesión. Se continúa en CPU.'
+        else:
+            try:
+                import ctranslate2
+                use_cuda=device=='cuda' or ctranslate2.get_cuda_device_count()>0
+            except Exception as e:
+                _CUDA_FAILURE=str(e)[:400]
+                warning='No se pudo comprobar la GPU. Se continúa en CPU.'
+    if use_cuda:
+        progress('Transcribiendo con la GPU…')
+        try:
+            result,metadata=_once(samples,model,'cuda',language)
+            metadata['requested_device']=device
+            return result,metadata
+        except Exception as e:
+            _CUDA_FAILURE=str(e)[:400]
+            warning='No se pudo usar la GPU. Se continúa automáticamente en CPU; no necesitas instalar CUDA para generar clips.'
+            # _once ya cerró el generador y liberó el modelo antes del reintento.
+    progress(warning or 'Transcribiendo en CPU…')
+    try:
+        result,metadata=_once(samples,model,'cpu',language)
+    except Exception as e:
+        detail=f' GPU: {_CUDA_FAILURE}.' if warning else ''
+        raise RuntimeError(f'No se pudo transcribir en CPU: {e}.{detail} El bloque no se guardó como terminado; puedes reintentarlo.') from e
+    metadata['requested_device']=device
+    if warning:
+        metadata['warning']=warning
+        metadata['cuda_error']=_CUDA_FAILURE
+    return result,metadata

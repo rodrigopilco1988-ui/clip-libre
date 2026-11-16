@@ -141,6 +141,7 @@ with tabs[0]:
                         def initial_progress(f,m):
                             bar.progress(min(1.,max(0.,f))); status.update(label=m)
                         report=analyze(store,new_sid,Analysis(model=initial_model,language='' if initial_language=='auto' else initial_language),initial_progress,max_blocks=1)
+                        st.session_state['import_warnings']=report['warnings']
                         for warning in report['warnings']: st.warning(warning)
                     status.update(label='Tu proyecto está listo',state='complete')
                 st.session_state['pending_project']=new_sid
@@ -148,6 +149,7 @@ with tabs[0]:
                 st.rerun()
             except Exception as e: st.error(str(e))
     if st.session_state.get('import_notice'): st.success(st.session_state.pop('import_notice'))
+    for warning in st.session_state.pop('import_warnings',[]): st.warning(warning)
     st.caption('1. Añade contenido   →   2. Genera clips   →   3. Revisa y edita   →   4. Exporta')
 
 if sid:
@@ -158,6 +160,7 @@ if sid:
         a,b,c=st.columns(3)
         model=a.selectbox('Modelo Whisper',['tiny','base','small','medium'],index=2)
         device=b.selectbox('Procesador',['auto','cpu','cuda'])
+        st.caption('Auto usa la GPU si funciona. Si falta una biblioteca o falla CUDA, se continúa en CPU automáticamente y se conserva el progreso.')
         block=c.number_input('Minutos por bloque',min_value=1,max_value=120,value=50)
         language=st.selectbox('Idioma',['es','en','auto'])
         a,b=st.columns(2)
@@ -173,6 +176,7 @@ if sid:
             try:
                 report=analyze(store,sid,Analysis(block_minutes=block,model=model,device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=min_s,max_seconds=max_s),update,max_blocks=max_blocks or None)
                 st.success(f"Completado: {report['blocks']} bloques nuevos en {report['elapsed_seconds']:.1f} s. RAM muestreada: {report['rss_sampled_mb']:.0f} MB.")
+                st.caption('Procesador utilizado: '+', '.join(report.get('devices',[]) or ['sin bloques nuevos']))
                 for warning in report['warnings']: st.warning(warning)
             except Exception as e: st.error(str(e))
         st.caption('La reanudación usa la misma fuente y configuración. Un cambio de configuración permite reanálisis; los candidatos solapados existentes se conservan. Los bloques no cortan ni modifican el original.')
