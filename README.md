@@ -1,4 +1,4 @@
-# Clip Libre · 0.1.2
+# Clip Libre · 0.2.0
 
 Aplicación local nueva para convertir videos en clips revisables. Interfaz propia en español, sin servicios de IA de pago. Primera entrega funcional; no equivale todavía a todas las capacidades de un editor comercial.
 
@@ -50,4 +50,4 @@ Para desarrollo: crea un entorno virtual e instala `pip install -r requirements.
 
 ## Si aparece «No runtime installed that matches 3.12»
 
-El lanzador `py` está instalado pero no encuentra un intérprete compatible. Instala Python 3.12 de 64 bits desde python.org, marca **Add python.exe to PATH**, completa la instalación y vuelve a abrir `Instalar.bat`. No hace falta instalar Python 3.11 además. La versión 0.1.2 comprueba que el intérprete realmente se ejecuta, permite usar Python del PATH sin depender de `py`, y no continúa hacia una ruta `.venv` inexistente. Si conserva un entorno incompleto, renombra únicamente `.venv` como `.venv-anterior` y vuelve a instalar; conserva `data/`.
+El lanzador `py` está instalado pero no encuentra un intérprete compatible. Instala Python 3.12 de 64 bits desde python.org, marca **Add python.exe to PATH**, completa la instalación y vuelve a abrir `Instalar.bat`. No hace falta instalar Python 3.11 además. La versión 0.2.0 comprueba que el intérprete realmente se ejecuta, permite usar Python del PATH sin depender de `py`, y no continúa hacia una ruta `.venv` inexistente. Si conserva un entorno incompleto, renombra únicamente `.venv` como `.venv-anterior` y vuelve a instalar; conserva `data/`.

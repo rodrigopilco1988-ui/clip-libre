@@ -4,7 +4,7 @@ from streamlit.testing.v1 import AppTest
 def test_empty_ui():
     app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
     assert not app.exception
-    assert app.title[0].value=='Clip Libre'
+    assert any(t.value=='Tu próximo clip empieza aquí' for t in app.title)
 
 def test_ui_with_candidates(video,tmp_path,monkeypatch):
     from cliplivre.store import Store
@@ -35,3 +35,16 @@ def test_ui_preview_and_export(video,tmp_path,monkeypatch):
     with s.connect() as db:
         row=db.execute('SELECT path FROM exports').fetchone()
     assert row and Path(row[0]).exists()
+
+
+def test_home_source_choices(tmp_path,monkeypatch):
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'new-ui'))
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    source=next(x for x in app.radio if x.label=='¿De dónde viene tu contenido?')
+    assert source.options==['YouTube','Twitch','Podcast','Archivo local']
+    source.set_value('Podcast').run()
+    assert not app.exception
+    assert any('podcast' in x.value.lower() for x in app.subheader)
+    next(x for x in app.radio if x.label=='¿De dónde viene tu contenido?').set_value('Twitch').run()
+    assert not app.exception
+    assert any('Pega el enlace' in x.label for x in app.text_input)

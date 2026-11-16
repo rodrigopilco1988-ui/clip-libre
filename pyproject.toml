@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clip-libre"
-version = "0.1.2"
+version = "0.2.0"
 description = "Editor local de clips con IA opcional"
 requires-python = ">=3.11,<3.14"
 license = "MIT"

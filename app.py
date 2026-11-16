@@ -2,65 +2,153 @@ from pathlib import Path
 import json
 import uuid
 import os
+import html
+import hashlib
 import streamlit as st
 from cliplivre.store import Store
-from cliplivre.sources import import_local,import_url,EXTENSIONS
+from cliplivre.sources import import_local,import_url,inspect_url,EXTENSIONS
 from cliplivre.pipeline import Analysis,analyze
 from cliplivre.render import Edit,render
 from cliplivre.media import probe,preview
 from cliplivre.signals import silent_intervals
 
 ROOT=Path(os.environ.get('CLIP_LIBRE_DATA',str(Path(__file__).resolve().parent/'data')))
-st.set_page_config(page_title='Clip Libre',page_icon='🎞️',layout='wide')
+st.set_page_config(page_title='Clip Libre · Estudio de clips',page_icon='🎬',layout='wide')
 store=Store(ROOT)
-st.title('Clip Libre')
-st.caption('Video largo → momentos revisables → clips editados. Procesamiento local; tú decides qué compartir.')
+st.markdown('''<style>
+.block-container{max-width:1440px;padding-top:2rem}
+h1{font-size:2.5rem!important;letter-spacing:-.05em;font-weight:750!important}
+h2,h3{letter-spacing:-.025em} [data-testid="stSidebar"]{border-right:1px solid #2a3040}
+[data-testid="stSidebar"] .block-container{padding-top:2rem}
+.stTabs [data-baseweb="tab-list"]{gap:24px;border-bottom:1px solid #30384b;margin-bottom:22px}
+.stTabs [aria-selected="true"]{color:#b7f171!important}
+[data-testid="stVerticalBlockBorderWrapper"]{border-radius:16px}
+div.stButton>button{border-radius:10px;min-height:42px;font-weight:650}
+div.stButton>button[kind="primary"]{background:#b7f171;color:#10160b;border:0}
+.cl-pill{display:inline-block;color:#b7f171;font-size:11px;letter-spacing:.14em;font-weight:700;padding:7px 12px;border:1px solid #34462b;border-radius:100px}
+.cl-lead{font-size:18px;color:#aeb8c9;max-width:740px;line-height:1.6;margin-bottom:24px}
+.cl-source{color:#aeb8c9;font-size:13px;border:1px solid #30394c;border-radius:9px;padding:9px 13px;display:inline-block;margin:4px}
+.cl-score{color:#b7f171;font-size:24px;font-weight:750}
+</style>''',unsafe_allow_html=True)
+
+
+def show_clip(path,start,end):
+    key=hashlib.sha256(f'{path}:{start:.3f}:{end:.3f}'.encode()).hexdigest()[:24]
+    folder=ROOT/'vistas_previas'; folder.mkdir(exist_ok=True)
+    dest=folder/(key+'.mp4')
+    if not dest.exists():
+        with st.spinner('Preparando vista previa del clip…'):
+            preview(path,start,end,dest)
+    st.video(str(dest))
 
 with st.sidebar:
-    st.header('Tu biblioteca')
+    st.title('Clip Libre')
+    st.caption('TU ESTUDIO DE CLIPS · LOCAL')
+    st.divider()
+    st.header('Mis proyectos')
     sources=store.sources()
-    sid=st.selectbox('Proyecto',options=[s['id'] for s in sources],format_func=lambda k:next(s['name'] for s in sources if s['id']==k)) if sources else None
-    st.caption('Originales y exportaciones se guardan separados dentro de data/.')
-    st.caption('Los modelos se descargan la primera vez. Después pueden trabajar sin conexión.')
-    with st.expander('Historial de trabajos'):
+    if st.session_state.get('pending_project'):
+        st.session_state['project_pick']=st.session_state.pop('pending_project')
+    sid=st.selectbox('Proyecto',options=[s['id'] for s in sources],format_func=lambda k:next(s['name'] for s in sources if s['id']==k),key='project_pick') if sources else None
+    if sid:
+        count=len(store.candidates(sid))
+        st.caption(f'{count} clips propuestos en este proyecto')
+    st.divider()
+    st.write('YouTube · Twitch · Videos · Podcasts')
+    st.caption('Procesamiento en tu equipo. Sin créditos ni suscripción.')
+    with st.expander('Actividad y errores'):
         with store.connect() as c:
             rows=[dict(r) for r in c.execute('SELECT state,message,updated FROM jobs ORDER BY updated DESC LIMIT 15')]
         for row in rows: st.write(row)
+    with st.expander('Dónde están mis archivos'):
+        st.write(str(ROOT))
+        st.caption('Originales, clips editados y subtítulos en carpetas separadas. Los modelos se descargan la primera vez.')
 
-tabs=st.tabs(['1 · Importar','2 · Analizar','3 · Revisar','4 · Editar y exportar'])
+tabs=st.tabs(['1 · Crear clips','2 · Configurar análisis','3 · Mis clips','4 · Editor y exportación'])
 with tabs[0]:
-    st.subheader('Añade tu video')
-    permission=st.checkbox('Tengo acceso permitido y permiso para procesar y reutilizar este contenido.')
-    mode=st.radio('Fuente',['Archivo local','Enlace público'],horizontal=True)
-    if mode=='Archivo local':
-        st.caption('Para videos largos, pega la ruta de Windows. Evita cargar gigabytes en el navegador.')
-        path=st.text_input('Ruta al archivo',placeholder=r'C:\Videos\grabacion.mkv')
-        upload=st.file_uploader('O selecciona un archivo (máximo 200 MB)',type=[x[1:] for x in sorted(EXTENSIONS)])
-        if st.button('Crear proyecto',disabled=not permission):
+    st.markdown('<span class="cl-pill">DE CONTENIDO LARGO A CLIPS CORTOS</span>',unsafe_allow_html=True)
+    st.title('Tu próximo clip empieza aquí')
+    st.markdown('<div class="cl-lead">Pega un enlace o sube tu contenido. Encuentra momentos, revisa los clips y edítalos con subtítulos en un solo lugar.</div>',unsafe_allow_html=True)
+    st.markdown(''.join(f'<span class="cl-source">{s}</span>' for s in ['YouTube y Shorts','Twitch: videos y clips','Directos accesibles','Podcasts de audio y video']),unsafe_allow_html=True)
+    with st.container(border=True):
+        mode=st.radio('¿De dónde viene tu contenido?',['YouTube','Twitch','Podcast','Archivo local'],horizontal=True)
+        podcast_input=st.radio('Tipo de podcast',['Archivo de audio o video','Enlace de YouTube o Twitch'],horizontal=True) if mode=='Podcast' else None
+        remote=mode in {'YouTube','Twitch'} or podcast_input=='Enlace de YouTube o Twitch'
+        remote_start=0; remote_end=None; live_mode='actual'; path=''; upload=None; url=''
+        if remote:
+            url=st.text_input('Pega el enlace de tu video, episodio o directo',placeholder='https://www.youtube.com/watch?v=…' if mode!='Twitch' else 'https://www.twitch.tv/videos/… o https://www.twitch.tv/canal')
+            if st.button('Comprobar enlace',disabled=not url.strip()):
+                try:
+                    with st.spinner('Comprobando acceso y tipo de contenido…'):
+                        st.session_state['link_info']=dict(url=url.strip(),**inspect_url(url))
+                except Exception as e:
+                    st.session_state.pop('link_info',None); st.error(str(e))
+            info=st.session_state.get('link_info',{})
+            info=info if info.get('url')==url.strip() else {}
+            if info:
+                st.success(info['title'])
+                st.caption(f"{info['provider']} · {info['kind']}"+(f" · {info['duration']/60:.1f} min" if info.get('duration') else ''))
+            content_type=st.radio('Qué quieres importar',['Video completo / VOD / episodio','Un tramo del video','Directo: capturar desde ahora','YouTube Live: intentar historial'],index=2 if info.get('live') else 0)
+            if content_type=='Un tramo del video' or content_type=='YouTube Live: intentar historial':
+                a,b=st.columns(2)
+                remote_start=a.number_input('Desde el minuto',min_value=0.,value=0.,step=1.)*60
+                duration=b.number_input('Cuántos minutos',min_value=1.,max_value=50.,value=10.,step=1.)*60
+                remote_end=remote_start+duration
+                if 'historial' in content_type: live_mode='historial'
+            elif content_type=='Directo: capturar desde ahora':
+                remote_end=st.number_input('Minutos que quieres capturar desde ahora',1,50,5)*60
+                st.caption('La captura tarda lo que dure el tramo elegido. Después podrás generar los clips. No recupera minutos anteriores.')
+            with st.expander('Qué enlaces puedes usar'):
+                st.write('YouTube: videos, Shorts, episodios y directos. Twitch: /videos/…, clips.twitch.tv/… y canales en emisión. Podcasts de otras plataformas: descarga el archivo con permiso y súbelo aquí.')
+                st.caption('La importación depende del acceso del proveedor. No se eluden bloqueos, DRM ni autenticación. Twitch activo no permite aquí recuperar el pasado: usa su VOD o captura desde ahora. Las rutas remotas siguen pendientes de validación con contenido real.')
+        else:
+            st.subheader('Sube tu podcast' if mode=='Podcast' else 'Sube tu video')
+            upload=st.file_uploader('Arrastra un archivo o haz clic para seleccionarlo',type=[x[1:] for x in sorted(EXTENSIONS)])
+            st.caption('Videos MP4, MOV, MKV y más. Audio MP3, WAV, M4A, AAC, OGG, FLAC y OPUS. Los podcasts de audio reciben una onda visual para exportarlos como video.')
+            with st.expander('Mi archivo pesa más de 200 MB'):
+                path=st.text_input('Pega la ruta del archivo en tu equipo',placeholder=r'C:\Videos\episodio.mkv')
+                st.caption('Puedes copiar la ruta desde el Explorador de Windows. El archivo se procesa desde el disco.')
+        permission=st.checkbox('Tengo acceso permitido y permiso para procesar y reutilizar este contenido.')
+        automatic=st.toggle('Generar clips automáticamente al importar',value=True)
+        with st.expander('Ajustes de creación'):
+            a,b=st.columns(2)
+            initial_model=a.selectbox('Calidad de transcripción',['small','tiny','base','medium'])
+            initial_language=b.selectbox('Idioma del contenido',['es','en','auto'])
+            st.caption('Small ofrece equilibrio. Tiny reduce el tiempo de espera. Se procesa un primer bloque de hasta 50 minutos; puedes continuar desde Configurar análisis.')
+        if st.button('Crear clips' if automatic else 'Importar contenido',type='primary',disabled=not permission,width='stretch'):
             try:
-                if upload:
-                    temp=ROOT/'temporales'; temp.mkdir(exist_ok=True)
-                    p=temp/(uuid.uuid4().hex+Path(upload.name).suffix)
-                    p.write_bytes(upload.getbuffer())
-                    try: dest=import_local(p,ROOT,permission)
-                    finally: p.unlink(missing_ok=True)
-                    name=upload.name
-                else:
-                    dest=import_local(path,ROOT,permission); name=Path(path).name
-                store.register(dest,name); st.success('Video importado. Selecciónalo en la biblioteca.'); st.rerun()
+                with st.status('Importando contenido…',expanded=True) as status:
+                    if remote:
+                        if not info:
+                            info=inspect_url(url)
+                        if info.get('live') and remote_end is None:
+                            remote_end=300
+                            status.update(label='Directo detectado: capturando los próximos 5 minutos…')
+                        dest=import_url(url,ROOT,remote_start,remote_end,permission,live_mode=live_mode)
+                        name=info.get('title') or url.strip()
+                    elif upload:
+                        temp=ROOT/'temporales'; temp.mkdir(exist_ok=True)
+                        p=temp/(uuid.uuid4().hex+Path(upload.name).suffix)
+                        p.write_bytes(upload.getbuffer())
+                        try: dest=import_local(p,ROOT,permission)
+                        finally: p.unlink(missing_ok=True)
+                        name=upload.name
+                    else:
+                        dest=import_local(path,ROOT,permission); name=Path(path).name
+                    new_sid=store.register(dest,name)
+                    if automatic:
+                        bar=st.progress(0.)
+                        def initial_progress(f,m):
+                            bar.progress(min(1.,max(0.,f))); status.update(label=m)
+                        report=analyze(store,new_sid,Analysis(model=initial_model,language='' if initial_language=='auto' else initial_language),initial_progress,max_blocks=1)
+                        for warning in report['warnings']: st.warning(warning)
+                    status.update(label='Tu proyecto está listo',state='complete')
+                st.session_state['pending_project']=new_sid
+                st.session_state['import_notice']='Contenido listo. Abre Mis clips para revisar tus propuestas.' if automatic else 'Contenido importado. Abre Configurar análisis para generar tus clips.'
+                st.rerun()
             except Exception as e: st.error(str(e))
-    else:
-        st.warning('YouTube/Twitch: integración experimental. No validada con directos reales. No usa cookies ni evita restricciones. El historial de un directo puede no estar disponible.')
-        url=st.text_input('Enlace HTTPS')
-        a,b=st.columns(2)
-        remote_start=a.number_input('Desde el segundo',min_value=0,value=0)
-        remote_end=b.number_input('Hasta el segundo',min_value=1,value=300)
-        if st.button('Recuperar tramo permitido',disabled=not permission):
-            try:
-                with st.spinner('Recuperando segmento finito…'):
-                    dest=import_url(url,ROOT,remote_start,remote_end,permission)
-                store.register(dest,f'{url} [{remote_start}–{remote_end}s]'); st.rerun()
-            except Exception as e: st.error(str(e))
+    if st.session_state.get('import_notice'): st.success(st.session_state.pop('import_notice'))
+    st.caption('1. Añade contenido   →   2. Genera clips   →   3. Revisa y edita   →   4. Exporta')
 
 if sid:
     source=store.source(sid); metadata=probe(source['path'])
@@ -90,7 +178,11 @@ if sid:
         st.caption('La reanudación usa la misma fuente y configuración. Un cambio de configuración permite reanálisis; los candidatos solapados existentes se conservan. Los bloques no cortan ni modifican el original.')
     candidates=store.candidates(sid)
     with tabs[2]:
-        st.subheader('Candidatos para revisar')
+        st.subheader('Tus clips, listos para revisar')
+        a,b,c=st.columns(3)
+        a.metric('Clips propuestos',len(candidates))
+        b.metric('Aceptados',sum(x['state']=='aceptado' for x in candidates))
+        c.metric('Por revisar',sum(x['state']=='pendiente' for x in candidates))
         st.caption('La puntuación estima interés; no garantiza viralidad. Los títulos y motivos de IA requieren comprobarse en el video.')
         a,b,c=st.columns(3)
         threshold=a.slider('Puntuación mínima',0,100,0)
@@ -98,14 +190,22 @@ if sid:
         order=c.selectbox('Ordenar por',['Puntuación','Inicio'])
         items=[x for x in candidates if x['score']>=threshold and x['state'] in states]
         items.sort(key=lambda x:-x['score'] if order=='Puntuación' else x['start'])
-        for item in items:
-            with st.expander(f"{item['score']}/100 · {item['title']} · {item['start']:.1f}–{item['end']:.1f} s · {item['state']}"):
-                st.write(item['reason']); st.caption(f"Método: {item['classification']} · muestras visuales: {item['visual_samples']}")
-                st.write('Gancho sugerido:',item.get('hook',''))
-                st.video(source['path'],start_time=item['start'],end_time=item['end'])
-                a,b=st.columns(2)
-                if a.button('Aceptar',key='accept'+item['id']): store.update(item['id'],state='aceptado'); st.rerun()
-                if b.button('Descartar',key='reject'+item['id']): store.update(item['id'],state='descartado'); st.rerun()
+        grid=st.columns(2)
+        for index,item in enumerate(items):
+            with grid[index%2]:
+                with st.container(border=True):
+                    st.markdown(f"<span class='cl-score'>{item['score']}</span> <span style='color:#aeb8c9'>/ 100 · interés estimado</span>",unsafe_allow_html=True)
+                    st.subheader(item['title'])
+                    st.caption(f"{item['start']:.1f}–{item['end']:.1f} s · {item['end']-item['start']:.0f} segundos · {item['state']}")
+                    st.write(item['reason'])
+                    if st.button('Ver clip',key='view'+item['id']): st.session_state['view'+item['id']]=True
+                    if st.session_state.get('view'+item['id']): show_clip(source['path'],item['start'],item['end'])
+                    a,b=st.columns(2)
+                    if a.button('Aceptar',key='accept'+item['id']): store.update(item['id'],state='aceptado'); st.rerun()
+                    if b.button('Descartar',key='reject'+item['id']): store.update(item['id'],state='descartado'); st.rerun()
+                    with st.expander('Por qué se propuso este clip'):
+                        st.write('Gancho sugerido:',item.get('hook',''))
+                        st.caption(f"Método: {item['classification']} · muestras visuales: {item['visual_samples']}")
         if not candidates: st.info('Analiza el video para generar propuestas. No se fuerza un número fijo de clips.')
     with tabs[3]:
         st.subheader('Editor y exportación')
@@ -113,7 +213,7 @@ if sid:
         if eligible:
             cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=lambda k:next(c['title'] for c in eligible if c['id']==k))
             item=next(c for c in eligible if c['id']==cid)
-            st.video(source['path'],start_time=item['start'],end_time=item['end'])
+            show_clip(source['path'],item['start'],item['end'])
             a,b=st.columns(2)
             start=a.number_input('Inicio (segundos)',min_value=0.,max_value=metadata['duration'],value=float(item['start']),key='start'+cid)
             end=b.number_input('Final (segundos)',min_value=0.,max_value=metadata['duration'],value=float(item['end']),key='end'+cid)
