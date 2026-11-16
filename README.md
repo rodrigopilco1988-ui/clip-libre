@@ -1,4 +1,4 @@
-# Clip Libre · 0.2.0
+# Clip Libre · 0.2.1
 
 Tu estudio local de clips: pega un enlace o carga un video o podcast, genera propuestas, revisa los momentos y exporta con subtítulos. Interfaz propia en español. Sin créditos, suscripciones ni APIs de IA de pago.
 
@@ -54,7 +54,7 @@ No se usan cookies ni credenciales, no se eluden DRM, autenticación o restricci
 
 Small es la opción inicial de faster-whisper. Tiny reduce el tiempo de espera; Base y Medium también están disponibles. Los modelos se descargan la primera vez. Los bloques usan audio mono de 16 kHz (aprox. 192 MB por 50 minutos aparte de modelos y datos). Las muestras visuales son de 320×180.
 
-La RTX 3060 de 12 GB y los 32 GB de RAM son la referencia de configuración, sin rendimiento certificado en esa GPU. Para CUDA necesitas un controlador y las bibliotecas CUDA/cuDNN compatibles con CTranslate2: https://github.com/SYSTRAN/faster-whisper#gpu . Si falta una DLL, elige CPU. La exportación usa libx264 en CPU.
+La RTX 3060 de 12 GB y los 32 GB de RAM son la referencia de configuración, sin rendimiento certificado en esa GPU. Para CUDA necesitas un controlador y las bibliotecas CUDA/cuDNN compatibles con CTranslate2: https://github.com/SYSTRAN/faster-whisper#gpu . Si CUDA devuelve un error, la aplicación libera el modelo y reintenta el bloque automáticamente en CPU. Informa del cambio y no vuelve a intentar la GPU durante esa sesión. Tras instalar o reparar CUDA, reinicia la aplicación para volver a probarla. La exportación usa libx264 en CPU.
 
 Ollama es opcional. Instálalo desde https://ollama.com/ y prepara `qwen3:4b` desde su interfaz o una vez con `ollama pull qwen3:4b`. Actívalo en Configurar análisis. El modelo es configurable. Whisper se libera antes y Ollama se descarga de memoria tras cada petición; detén otros modelos GPU para conservar VRAM. Si el servicio está apagado, se mantiene el análisis heurístico. Ollama recibe texto, no imágenes. La inferencia real con ese modelo sigue pendiente de validación.
 
@@ -88,3 +88,9 @@ Código original MIT. Dependencias y modelos conservan sus licencias: `docs/LICE
 Arquitectura y límites: `docs/ARQUITECTURA.md`. La interfaz utiliza un diseño propio y no copia marcas, recursos ni código de OpusClip.
 
 Para desarrollo: crea un entorno virtual, instala `pip install -r requirements.txt` y ejecuta `python -m streamlit run app.py --server.address 127.0.0.1 --browser.gatherUsageStats false`.
+
+## Si aparece cublas64_12.dll o un error CUDA
+
+En 0.2.1, un fallo recuperable de CUDA ya no detiene el análisis: el bloque se reintenta en CPU, se informa del procesador utilizado y se conserva el progreso confirmado. No necesitas instalar CUDA para usar Clip Libre; CPU puede tardar más. Los resultados parciales del intento fallido se descartan para evitar palabras duplicadas.
+
+En versiones anteriores, selecciona **Configurar análisis → Procesador → cpu → Analizar minutos pendientes** para continuar. No borres tus proyectos. La aceleración GPU requiere todavía sus bibliotecas compatibles; esta actualización permite seguir trabajando cuando no están disponibles.

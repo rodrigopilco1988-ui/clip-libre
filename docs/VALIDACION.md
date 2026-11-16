@@ -59,7 +59,7 @@ El primer intento de adjuntar el ZIP en el chat no pudo utilizar la ruta de sali
 
 Código: https://github.com/rodrigopilco1988-ui/clip-libre
 
-Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.2.0
+Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.2.1
 
 La Release enlaza el ZIP de código, documentación y ejemplos y `SHA256SUMS.txt`, guardados en la carpeta `distribucion/` del repositorio. Esta vía evita depender del servicio de subida de adjuntos de Releases, que rechazó la autenticación en esta sesión. El checksum se publica por separado para evitar una referencia circular dentro del ZIP. La existencia y descarga de esos adjuntos debe comprobarse al publicar. El ZIP no contiene entornos virtuales, pesos de modelos, ejecutables externos ni la base de datos con rutas de esta máquina.
 
@@ -98,3 +98,19 @@ Commit de código probado: `1fd3c3904ce2958794d050b6f0504317ae7cdba5`.
 No se descargó contenido de terceros para estas pruebas. Los intentos de consulta de metadatos reales fallaron: YouTube por bloqueo proxy 403 y Twitch por certificado no verificable en esta red. Se mantuvo TLS y no se eludió el bloqueo. Las pruebas controladas no sustituyen la validación de descargas/directos de esos proveedores. Consulta `FUENTES-0.2.0.md` para la matriz de compatibilidad y límites.
 
 Las secciones anteriores conservan el historial de versiones previas. Las capturas de interfaz con una tarjeta de demostración no prueban calidad de selección en videos reales ni anuncian una clonación de un producto de terceros.
+
+## Versión 0.2.1: fallo CUDA y continuación CPU
+
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43975505469
+
+Commit de código probado: `5e93443bf5bb78235cd0a5400a6bf4198515e334`.
+
+- Windows: **40 pruebas aprobadas en 23,56 s**.
+- Linux: **37 aprobadas y 3 omitidas específicas de Windows en 13,07 s**.
+- Instalador BAT completo y `pip check` vuelven a finalizar correctamente en Windows.
+- Se reproduce de forma controlada el error `Library cublas64_12.dll is not found or cannot be loaded` tanto en auto como en cuda. Se verifica el cambio a CPU, el aviso y que no se reintente la GPU en el siguiente bloque de la sesión.
+- Se inyecta un error tras producir un segmento parcial GPU: se verifica que se descarte y que el modelo GPU se descargue antes de cargar CPU. Se comprueba que una GPU funcional se siga usando y que un fallo CPU no se informe como éxito.
+- La prueba de integración verifica progreso incremental de 6 a 8 segundos usando CPU tras el fallo, y cero bloques repetidos en la siguiente revisión.
+- Prueba real adicional, sin dobles de Whisper: se forzó CUDA en el entorno local no compatible; CTranslate2 devolvió «CUDA driver version is insufficient for CUDA runtime version» y se transcribieron después 70 palabras en CPU. Metadatos: `transcribe-0.2.1-fallback-real.json`. También pasó una transcripción CPU directa.
+
+El error exacto de DLL se cubre con un doble de prueba, no con una RTX 3060 física. La prueba real cubre otro fallo recuperable del mismo backend. La aceleración en el equipo del usuario y los abortos nativos no se presentan como validados. El progreso se guarda solo al completar cada bloque y el hash de configuración no cambia al recurrir a CPU.
