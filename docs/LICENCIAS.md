@@ -32,3 +32,7 @@ Antes de redistribuir ejecutables o modelos, conserva sus licencias y avisos com
 - mutagen 1.48.1: GPL-2.0-or-later.
 - pycryptodomex 3.24.2: BSD, Public Domain.
 - brotli 1.2.1: MIT.
+
+## Reparación GPU opcional · 0.2.2
+
+El botón de reparación y RepararGPU.bat instalan nvidia-cublas-cu12, nvidia-cudnn-cu12, nvidia-cuda-runtime-cu12 y nvidia-cuda-nvrtc-cu12 desde sus paquetes oficiales de NVIDIA en PyPI. Son binarios propietarios gratuitos sujetos a las condiciones de NVIDIA; no se presentan como software abierto ni se incluyen en el ZIP. Su instalación es opcional. La aplicación y las dependencias CPU mantienen sus licencias anteriores. La GPU NVIDIA requiere también su controlador, que no se instala ni modifica desde Clip Libre.

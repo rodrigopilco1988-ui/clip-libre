@@ -1,0 +1,29 @@
+{
+  "model": "tiny",
+  "device": "cpu",
+  "duration": 24.95,
+  "trials": [
+    {
+      "beam": 3,
+      "seconds": 1.035,
+      "words": 70
+    },
+    {
+      "beam": 1,
+      "seconds": 0.756,
+      "words": 69
+    },
+    {
+      "beam": 1,
+      "seconds": 0.777,
+      "words": 69
+    },
+    {
+      "beam": 3,
+      "seconds": 1.039,
+      "words": 70
+    }
+  ],
+  "median_beam1": 0.7665,
+  "median_beam3": 1.037
+}

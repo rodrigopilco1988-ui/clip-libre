@@ -1,4 +1,4 @@
-# Clip Libre · 0.2.1
+# Clip Libre · 0.2.2
 
 Tu estudio local de clips: pega un enlace o carga un video o podcast, genera propuestas, revisa los momentos y exporta con subtítulos. Interfaz propia en español. Sin créditos, suscripciones ni APIs de IA de pago.
 
@@ -11,6 +11,16 @@ Tu estudio local de clips: pega un enlace o carga un video o podcast, genera pro
 5. Haz doble clic en **Iniciar.bat**. Abre http://127.0.0.1:8501 . Para el uso diario basta con ese archivo.
 
 Si ya utilizabas otra versión, conserva tu carpeta **data/**: contiene tus proyectos y archivos. Puedes copiarla a la nueva carpeta con la aplicación cerrada. No borres esa carpeta para reparar una instalación.
+
+## Preparar tu RTX 3060 (opcional, una vez)
+
+1. Abre **Crear clips → Preparar mi tarjeta NVIDIA para acelerar el análisis**.
+2. Pulsa **Instalar o reparar soporte NVIDIA**. Descarga bibliotecas oficiales desde PyPI; puede superar 1,3 GB. Reserva unos 4 GB libres entre descarga y archivos instalados.
+3. Cierra y vuelve a abrir la aplicación.
+4. En el mismo apartado, pulsa **Probar transcripción en GPU**. La primera prueba puede descargar Tiny. Solo informa de éxito si termina una inferencia CUDA real; no recurre a CPU para esa prueba.
+5. Si pasa, analiza con **Procesador: auto**. Si falla por el controlador, actualízalo desde https://www.nvidia.com/drivers/ y vuelve a probar.
+
+También puedes cerrar la aplicación y ejecutar **RepararGPU.bat**, sin escribir comandos. Las bibliotecas se instalan dentro del entorno de Clip Libre; no se copian DLL a System32 ni se instala un controlador del sistema. Son componentes propietarios gratuitos de NVIDIA, opcionales para CPU. La transcripción en GPU sigue dependiendo de un controlador y hardware compatibles.
 
 ## Crear tu primer clip
 
@@ -94,3 +104,9 @@ Para desarrollo: crea un entorno virtual, instala `pip install -r requirements.t
 En 0.2.1, un fallo recuperable de CUDA ya no detiene el análisis: el bloque se reintenta en CPU, se informa del procesador utilizado y se conserva el progreso confirmado. No necesitas instalar CUDA para usar Clip Libre; CPU puede tardar más. Los resultados parciales del intento fallido se descartan para evitar palabras duplicadas.
 
 En versiones anteriores, selecciona **Configurar análisis → Procesador → cpu → Analizar minutos pendientes** para continuar. No borres tus proyectos. La aceleración GPU requiere todavía sus bibliotecas compatibles; esta actualización permite seguir trabajando cuando no están disponibles.
+
+## Corrección 0.2.2: Ver clip y rendimiento
+
+El botón **Ver clip** ya no reutiliza su clave como estado de apertura. Se probó el clic y la reproducción en Chromium, además de su permanencia al cambiar filtros. Las vistas previas se generan a 24 fps, se guardan de forma atómica y se reutilizan; un fallo no deja un archivo parcial que se confunda con una vista válida.
+
+La transcripción CPU usa una búsqueda más rápida (puede dar palabras algo distintas, por lo que conviene revisar subtítulos). Tiny aparece identificado como opción rápida y Small como equilibrada. Esto no convierte el resto del procesamiento en GPU: audio, OpenCV y exportación libx264 siguen usando CPU. Los resultados y límites están en `docs/VALIDACION.md`.

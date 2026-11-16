@@ -59,7 +59,7 @@ El primer intento de adjuntar el ZIP en el chat no pudo utilizar la ruta de sali
 
 Código: https://github.com/rodrigopilco1988-ui/clip-libre
 
-Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.2.1
+Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.2.2
 
 La Release enlaza el ZIP de código, documentación y ejemplos y `SHA256SUMS.txt`, guardados en la carpeta `distribucion/` del repositorio. Esta vía evita depender del servicio de subida de adjuntos de Releases, que rechazó la autenticación en esta sesión. El checksum se publica por separado para evitar una referencia circular dentro del ZIP. La existencia y descarga de esos adjuntos debe comprobarse al publicar. El ZIP no contiene entornos virtuales, pesos de modelos, ejecutables externos ni la base de datos con rutas de esta máquina.
 
@@ -114,3 +114,24 @@ Commit de código probado: `5e93443bf5bb78235cd0a5400a6bf4198515e334`.
 - Prueba real adicional, sin dobles de Whisper: se forzó CUDA en el entorno local no compatible; CTranslate2 devolvió «CUDA driver version is insufficient for CUDA runtime version» y se transcribieron después 70 palabras en CPU. Metadatos: `transcribe-0.2.1-fallback-real.json`. También pasó una transcripción CPU directa.
 
 El error exacto de DLL se cubre con un doble de prueba, no con una RTX 3060 física. La prueba real cubre otro fallo recuperable del mismo backend. La aceleración en el equipo del usuario y los abortos nativos no se presentan como validados. El progreso se guarda solo al completar cada bloque y el hash de configuración no cambia al recurrir a CPU.
+
+## Versión 0.2.2: Ver clip, reparación NVIDIA y rendimiento
+
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43980626584
+
+Commit de código probado: `70c61116b067032d31582c3caabe9048017a6e15`.
+
+- Windows: **45 pruebas aprobadas en 20,73 s**.
+- Linux: **42 aprobadas y 3 omitidas específicas de Windows en 13,57 s**.
+- La regresión AppTest pulsa Ver clip, comprueba ausencia de excepción y vuelve a cambiar un filtro manteniendo la apertura. El fallo anterior era modificar st.session_state usando la misma clave del botón ya creado.
+- Chromium real comprobó el clic y esperó la aparición de un video visible, sin excepción Streamlit. También comprobó la presencia de controles de reparación. Capturas `view-0.2.2.png` y `gpu-0.2.2.png`; usan el proyecto sintético de demostración descrito en la validación 0.2.0.
+- El instalador normal y RepararGPU.bat se ejecutaron de verdad en Windows. Se instalaron las bibliotecas NVIDIA en .venv y se cargaron por ruta absoluta **cublasLt64_12.dll, cublas64_12.dll y cudnn64_9.dll**. El informe mostró errors=[] y missing=[]. pip check no encontró incompatibilidades.
+- Las pruebas del cargador verifican búsqueda de directorios, retención y reutilización de handles, y rechazo de bibliotecas ausentes. La prueba del comprobador garantiza que use CUDA sin alternativa CPU; se controla tanto éxito como fallo.
+- El runner de Windows no dispone de una RTX para inferencia. La carga de DLL no se presenta como prueba de aceleración física. El botón Probar transcripción en GPU ejecuta un modelo Tiny en un subproceso y solo muestra éxito si completa la inferencia CUDA. Puede requerir descargar Tiny y actualizar el controlador NVIDIA.
+- Vistas previas limitadas a 24 fps y guardadas por renombrado atómico; una prueba reproduce un fallo FFmpeg con archivo parcial y comprueba su eliminación.
+
+### Ensayo CPU
+
+Whisper Tiny int8, una sola carga de modelo, calentamiento previo y audio sintético autorizado de 24,95 s. Cuatro ejecuciones alternadas con beam_size 3,1,1,3: medianas **1,037 s** para 3 y **0,7665 s** para 1; 70 y 69 palabras respectivamente. Datos en `cpu-beam-0.2.2.json`. La versión usa búsqueda de ancho 1 en CPU y conserva 3 en CUDA. Es un ensayo pequeño de transcripción, no tiempo total de la app, no una prueba de calidad ni una garantía para videos largos o para el hardware del usuario.
+
+Las bibliotecas opcionales de NVIDIA son propietarias gratuitas y no se redistribuyen dentro del ZIP. Se descargan desde PyPI; no se copian DLL a System32 ni se instalan controladores. La exportación y OpenCV siguen en CPU. Los fallos irrecuperables de inferencia en el comprobador no cierran el proceso principal porque se ejecuta como hijo.

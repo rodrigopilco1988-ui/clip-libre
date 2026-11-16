@@ -1,0 +1,20 @@
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43980626584
+Commit: 70c61116b067032d31582c3caabe9048017a6e15
+Resultado: success en Windows y Linux; reparación y carga real de bibliotecas en Windows
+
+tests (windows-latest)	Run python -m pytest -q	2026-11-16T23:38:06.0062945Z 45 passed in 20.73s
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-16T23:38:52.6821928Z Instalacion terminada. Abre Iniciar.bat.
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-16T23:38:53.1193343Z No broken requirements found.
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.1548285Z     "cublasLt64_12.dll",
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.1551384Z     "cublas64_12.dll",
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.1551773Z     "cudnn64_9.dll"
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.1552488Z   "errors": [],
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.1552832Z   "missing": []
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.1553976Z Bibliotecas NVIDIA cargadas. Reinicia Clip Libre y usa auto. La inferencia GPU debe confirmarse con tu video.
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.3715276Z     "cublasLt64_12.dll",
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.3715696Z     "cublas64_12.dll",
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.3716106Z     "cudnn64_9.dll"
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.3716678Z   "errors": [],
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.3716943Z   "missing": []
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-16T23:39:50.8849485Z No broken requirements found.
+tests (ubuntu-latest)	Run python -m pytest -q	2026-11-16T23:36:54.0914832Z 42 passed, 3 skipped in 13.57s
