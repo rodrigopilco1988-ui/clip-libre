@@ -111,3 +111,11 @@ def test_clear_source_errors():
     assert 'certificado' in source_message(RuntimeError('CERTIFICATE_VERIFY_FAILED'))
     assert 'acceso restringido' in source_message(RuntimeError('Sign in to confirm'))
     assert 'No se encontró' in source_message(RuntimeError('404 video unavailable'))
+
+
+def test_local_javascript_runtime():
+    from cliplivre.sources import local_deno
+    from cliplivre.media import run
+    runtime=local_deno()
+    assert runtime, 'La instalación debe incluir Deno para el extractor de YouTube.'
+    assert run([runtime,'eval','console.log(1 + 1)'],timeout=30).strip()==b'2'

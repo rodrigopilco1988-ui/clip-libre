@@ -1,6 +1,8 @@
 from pathlib import Path
 import shutil
 import uuid
+import sys
+import os
 from urllib.parse import urlparse
 from .media import probe,run
 
@@ -44,6 +46,11 @@ def validate_url(url):
     return url
 
 
+def local_deno():
+    bundled=Path(sys.executable).with_name('deno.exe' if os.name=='nt' else 'deno')
+    return str(bundled) if bundled.is_file() else shutil.which('deno')
+
+
 def source_message(error):
     text=str(error); lower=text.lower()
     if 'certificate_verify_failed' in lower or 'certificate verify failed' in lower:
@@ -60,7 +67,8 @@ def source_message(error):
 def extract_info(url):
     from yt_dlp import YoutubeDL
     try:
-        with YoutubeDL({'quiet':True,'no_warnings':True,'noplaylist':True,'skip_download':True,
+        runtime=local_deno()
+        with YoutubeDL({'js_runtimes':{'deno':{'path':runtime}} if runtime else {},'quiet':True,'no_warnings':True,'noplaylist':True,'skip_download':True,
                         'socket_timeout':20,'retries':1}) as y:
             info=y.extract_info(validate_url(url),download=False)
     except Exception as e:
@@ -122,6 +130,8 @@ def import_url(url,root,start=0,end=None,permission=False,live_mode='actual'):
         cmd=[sys.executable,'-m','yt_dlp','--no-playlist','--no-progress','--socket-timeout','20','--retries','1',
              '-f','bv*[height<=1080]+ba/b[height<=1080]',
              '--merge-output-format','mkv','-o',str(folder/'fuente.%(ext)s')]
+        runtime=local_deno()
+        if runtime: cmd+=['--js-runtimes','deno:'+runtime]
         if end is not None:
             cmd+=['--download-sections',f'*{start}-{end}','--force-keyframes-at-cuts']
         if live: cmd+=['--live-from-start']
