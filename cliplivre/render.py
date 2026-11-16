@@ -3,9 +3,18 @@ from dataclasses import dataclass, asdict
 import json
 import math
 import uuid
+from functools import lru_cache
 from .media import probe, run
 from .subtitles import map_words, write
 from .signals import visual_features
+
+
+@lru_cache(maxsize=1)
+def filter_file_option():
+    # FFmpeg reciente eliminó -filter_complex_script; -/filter_complex carga
+    # el argumento desde archivo y evita el límite de línea de comandos de Windows.
+    help_text = run(['ffmpeg', '-hide_banner', '-h', 'full'], timeout=30)
+    return '-filter_complex_script' if b'-filter_complex_script' in help_text else '-/filter_complex'
 
 @dataclass
 class Edit:
@@ -115,7 +124,7 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     if edit.burn and relative_words: filters.append('ass=subtitulos.ass')
     graph.append('[framed]'+','.join(filters)+'[final]')
     script=target/'filters.txt'; script.write_text(';\n'.join(graph),encoding='utf-8')
-    cmd=['ffmpeg','-v','error','-y','-threads','2','-i',str(Path(path).resolve()),'-filter_complex_threads','1','-filter_complex_script',str(script),'-map','[final]']
+    cmd=['ffmpeg','-v','error','-y','-threads','2','-i',str(Path(path).resolve()),'-filter_complex_threads','1',filter_file_option(),str(script),'-map','[final]']
     if info['audio']: cmd+=['-map','[sound]','-c:a','aac','-b:a','160k']
     cmd+=['-c:v','libx264','-preset',edit.preset,'-crf','20','-pix_fmt','yuv420p','-movflags','+faststart',str(target/'editado.mp4')]
     progress('Codificando video con FFmpeg…')

@@ -1,4 +1,4 @@
-# Clip Libre · 0.1.0
+# Clip Libre · 0.1.1
 
 Aplicación local nueva para convertir videos en clips revisables. Interfaz propia en español, sin servicios de IA de pago. Primera entrega funcional; no equivale todavía a todas las capacidades de un editor comercial.
 

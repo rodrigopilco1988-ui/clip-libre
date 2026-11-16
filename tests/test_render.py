@@ -10,8 +10,8 @@ def test_subtitles_and_mapping(tmp_path):
     mapped=map_words(words,[(0,2),(4,6)])
     assert mapped[1]['start']==2
     srt,ass=write(mapped,tmp_path/'sub',animated=True)
-    assert '00:00:01,000 --> 00:00:03,000' in srt.read_text()
-    assert '（x）' in ass.read_text() and '\\1c' in ass.read_text()
+    assert '00:00:01,000 --> 00:00:03,000' in srt.read_text(encoding="utf-8")
+    assert '（x）' in ass.read_text(encoding="utf-8") and '\\1c' in ass.read_text(encoding="utf-8")
     assert retained(0,6,[(2,4)])==[(0,2),(4,6)]
     with pytest.raises(ValueError): retained(0,6,[(0,6)])
 
