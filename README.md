@@ -1,53 +1,90 @@
 # Clip Libre · 0.2.0
 
-Aplicación local nueva para convertir videos en clips revisables. Interfaz propia en español, sin servicios de IA de pago. Primera entrega funcional; no equivale todavía a todas las capacidades de un editor comercial.
+Tu estudio local de clips: pega un enlace o carga un video o podcast, genera propuestas, revisa los momentos y exporta con subtítulos. Interfaz propia en español. Sin créditos, suscripciones ni APIs de IA de pago.
 
-## Windows: instalar y abrir
+## Instalar una vez en Windows
 
-1. Extrae todo el proyecto en una carpeta con espacio libre. Los originales se copian: reserva al menos el tamaño de tus videos más las exportaciones.
-2. Instala Python **3.12 de 64 bits** (o 3.11) desde https://www.python.org/downloads/windows/.
-3. Instala FFmpeg y FFprobe con el filtro ASS/libass, por ejemplo la distribución enlazada en https://ffmpeg.org/download.html. Añade su carpeta `bin` al PATH. `Instalar.bat` detecta si falta y muestra la alternativa con winget. Las licencias del binario dependen de su compilación.
-4. Haz doble clic en **Instalar.bat**. Requiere internet para descargar dependencias. No instala Ollama, controladores NVIDIA ni CUDA automáticamente.
-5. Haz doble clic en **Iniciar.bat**. Abre la aplicación en http://127.0.0.1:8501. Cierra esa ventana para detenerla. El uso diario no requiere terminal.
-6. Importa `examples/autorizado.mp4`, confirma permiso, configura idioma inglés y Tiny para reproducir la prueba rápida. Para tus videos en español puedes usar Small, la opción inicial. La primera transcripción descarga el modelo; requiere internet y espacio de disco. Después se reutiliza la caché en `data/modelos/`.
-7. Analiza, acepta candidatos, corrige palabras e intervalos, genera vista previa y exporta. Los archivos aparecen en `data/editados/clip_…/`. El original está separado en `data/originales/`.
+1. Extrae el ZIP completo en una carpeta nueva.
+2. Instala **Python 3.12 de 64 bits** desde https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe . Marca **Add python.exe to PATH**.
+3. Necesitas **FFmpeg y FFprobe con libass**, disponibles desde https://ffmpeg.org/download.html . Añade su carpeta `bin` al PATH. Si faltan, el instalador te lo indicará. Una opción con winget es `winget install --id Gyan.FFmpeg -e`.
+4. Haz doble clic en **Instalar.bat**. Descarga las dependencias, incluidos los componentes de compatibilidad de enlaces. Si falla, lee el mensaje que deja abierto.
+5. Haz doble clic en **Iniciar.bat**. Abre http://127.0.0.1:8501 . Para el uso diario basta con ese archivo.
 
-## RTX 3060 12 GB / 32 GB RAM
+Si ya utilizabas otra versión, conserva tu carpeta **data/**: contiene tus proyectos y archivos. Puedes copiarla a la nueva carpeta con la aplicación cerrada. No borres esa carpeta para reparar una instalación.
 
-Small y bloques de 50 minutos son el punto de partida configurable, no un rendimiento certificado. Los bloques usan audio mono de 16 kHz en memoria (aprox. 192 MB por 50 minutos, aparte de modelos y datos). La muestra visual se reduce a 320×180. FFmpeg exporta en CPU con libx264 para evitar añadir dependencias de NVENC; CUDA se usa para Whisper cuando está disponible.
+## Crear tu primer clip
 
-Para CUDA instala un controlador NVIDIA y las bibliotecas CUDA/cuDNN compatibles con la versión instalada de CTranslate2, siguiendo https://github.com/SYSTRAN/faster-whisper#gpu. La detección de GPU no garantiza que estén las DLL correctas. Si ocurre un error, la UI lo muestra: selecciona CPU para continuar. **Pasan 26 pruebas en Windows y 23 en Linux mediante GitHub Actions. El instalador BAT completo también se validó en Windows sin la pausa final. Iniciar.bat, CUDA y la RTX 3060 siguen sin validar.**
+1. Abre **Crear clips**.
+2. Elige **YouTube**, **Twitch**, **Podcast** o **Archivo local**.
+3. Pega el enlace o selecciona tu archivo. En videos muy grandes, abre «Mi archivo pesa más de 200 MB» y pega la ruta desde el Explorador de Windows.
+4. Confirma que tienes acceso y permiso para reutilizar el material.
+5. Pulsa **Crear clips**. La generación automática está activada inicialmente.
+6. Abre **Mis clips**: revisa la puntuación estimada, pulsa **Ver clip** y acepta o descarta propuestas.
+7. En **Editor y exportación**, ajusta el intervalo, corrige subtítulos, elige formato y encuadre, genera una vista previa y exporta.
 
-Ollama es opcional: instala https://ollama.com/ y descarga **Qwen3 4B** (`qwen3:4b`, pesos con licencia Apache 2.0) desde su interfaz o, una sola vez, con `ollama pull qwen3:4b`. Activa Ollama en la aplicación cuando el servicio local esté listo. No hay descarga automática de ese modelo desde Clip Libre. Se solicita salida JSON y descarga de memoria tras cada petición (`keep_alive: 0`). Whisper se libera primero. Detén otros modelos GPU; no hay un gestor que pueda garantizar VRAM libre en todos los procesos. El modo sin Ollama está disponible y el fallo del servicio conserva las propuestas heurísticas.
+Se analiza inicialmente un bloque de hasta 50 minutos. Si tu contenido es más largo, continúa en **Configurar análisis**: no repetirá los bloques ya confirmados con la misma configuración. La puntuación no garantiza viralidad y los títulos requieren revisión humana.
 
-## Archivos y privacidad
+## Qué contenido puedes introducir
 
-- `data/history.sqlite3`: proyectos, sesiones, bloques, candidatos y exportaciones.
-- `data/originales/`: copias intactas de las fuentes importadas.
-- `data/editados/`: videos editados, SRT, ASS, filtros y decisiones JSON.
-- El código no envía videos/transcripciones a una IA remota. Enlaces y primeras descargas de modelos/dependencias sí usan internet. Streamlit se inicia sin telemetría y solo en loopback. No expongas el servidor a internet.
-- Usa únicamente contenido con acceso permitido y permiso de reutilización. No introduzcas cookies ni credenciales; no se eluden DRM ni restricciones.
+| Contenido | Cómo introducirlo |
+|---|---|
+| YouTube, Shorts o un episodio publicado allí | Pega el enlace; elige video completo o tramo |
+| Twitch VOD | Pega el enlace `twitch.tv/videos/…` |
+| Clip de Twitch | Pega el enlace `clips.twitch.tv/…` |
+| Canal en directo | Pega el enlace y elige **capturar desde ahora** |
+| Video de tu disco | Carga MP4, MOV, MKV, WebM, AVI, M4V o TS |
+| Podcast de audio | Carga MP3, WAV, M4A, AAC, OGG, FLAC u OPUS |
+| Podcast en video | Carga su archivo de video o su enlace de YouTube/Twitch |
 
-## Qué puedes usar
+**Comprobar enlace** consulta el título y detecta si está en directo. No confirma derechos ni garantiza la descarga posterior. Spotify, RSS y otros proveedores por enlace no están implementados; puedes importar un archivo autorizado.
 
-Importación local de MP4/MOV/MKV/WebM y otros formatos que FFmpeg soporte; bloques incrementales por revisión; Whisper y palabras; heurísticas acústicas/visuales; integración Ollama con alternativa sin servicio; revisión, filtro y aceptación; ajuste de tiempos y texto; vista previa renderizada; MP4 9:16, 1:1, 16:9 hasta 1080×1920/1920×1080; subtítulos SRT/ASS resaltados y opcionalmente incrustados; zoom suave, silencios configurables, fundidos, encuadre por centro/rostros y cámara/gameplay con región manual; exportación en lote de aceptados.
+Un podcast de audio conserva el original y obtiene una onda visual para crear clips en video con subtítulos.
 
-Los enlaces YouTube/Twitch son **experimentales y no validados en vivo**. Se descargan tramos finitos de hasta 50 minutos. No hay captura continua ni reanudación remota de un directo. Los tiempos de esos clips son relativos al segmento descargado. Un directo sin historial recuperable puede requerir esperar al VOD o usar una grabación autorizada.
+### Directos y restricciones
 
-Consulta `docs/ARQUITECTURA.md` y `docs/VALIDACION.md` para límites y resultados concretos. No se implementaron identificación de personas, seguimiento fiable de hablante activo, editor multipista ni comprensión semántica visual.
+La captura desde ahora guarda los próximos minutos elegidos: tarda lo mismo que la grabación. Si importas un directo sin elegir duración, se intenta una captura inicial de 5 minutos. No hay captura continua ni reanudación automática de streams.
 
-## Pruebas y reproducción
+YouTube Live permite **intentar** un tramo histórico cuando el proveedor ofrece DVR. Para el pasado de un directo activo de Twitch, utiliza su VOD. Nadie puede garantizar recuperación de contenido que el proveedor no entrega.
 
-Abre `Probar.bat` para pruebas automatizadas (FFmpeg necesario). Para el flujo real de voz incluida: `.venv\Scripts\python.exe examples\run_e2e.py`. Este comando de desarrollo utiliza Tiny CPU, descarga el modelo si falta y exporta a 1080×1920. La UI permite hacer el mismo recorrido sin terminal. El informe de la ejecución realizada se incluye en `examples/resultado/informe.json`.
+No se usan cookies ni credenciales, no se eluden DRM, autenticación o restricciones y no se desactiva TLS. La descarga puede fallar por permisos, red, certificados, ausencia de historial o cambios de la plataforma. La UI muestra errores específicos.
 
-El video de prueba fue generado localmente con FFmpeg testsrc2 y voz Flite, con texto propio. No contiene material de terceros ni personas reales. Su texto se incluye en `examples/voz.txt`. Se autoriza su reutilización bajo CC0. Flite no es necesario para usar ni probar la aplicación con el MP4 incluido.
+**Estado real:** las rutas remotas están implementadas y probadas con respuestas controladas y un flujo HLS local autorizado. Esta red bloqueó la consulta real a YouTube y falló la verificación TLS con Twitch. No se declara descarga real validada en esas plataformas. Los archivos locales y los podcasts sí tienen pruebas de extremo a extremo. Detalles: `docs/FUENTES-0.2.0.md` y `docs/VALIDACION.md`.
 
-## Código y distribución
+## IA y hardware
 
-Código nuevo bajo MIT. Dependencias y modelos tienen sus licencias independientes: `docs/LICENCIAS.md`. No se distribuyen FFmpeg, Ollama, Python, CUDA ni pesos de modelos dentro del ZIP. La instalación y descarga inicial requieren internet; los proveedores pueden cambiar disponibilidad o condiciones.
+Small es la opción inicial de faster-whisper. Tiny reduce el tiempo de espera; Base y Medium también están disponibles. Los modelos se descargan la primera vez. Los bloques usan audio mono de 16 kHz (aprox. 192 MB por 50 minutos aparte de modelos y datos). Las muestras visuales son de 320×180.
 
-Para desarrollo: crea un entorno virtual e instala `pip install -r requirements.txt`, luego `python -m streamlit run app.py --server.address 127.0.0.1 --browser.gatherUsageStats false`.
+La RTX 3060 de 12 GB y los 32 GB de RAM son la referencia de configuración, sin rendimiento certificado en esa GPU. Para CUDA necesitas un controlador y las bibliotecas CUDA/cuDNN compatibles con CTranslate2: https://github.com/SYSTRAN/faster-whisper#gpu . Si falta una DLL, elige CPU. La exportación usa libx264 en CPU.
 
-## Si aparece «No runtime installed that matches 3.12»
+Ollama es opcional. Instálalo desde https://ollama.com/ y prepara `qwen3:4b` desde su interfaz o una vez con `ollama pull qwen3:4b`. Actívalo en Configurar análisis. El modelo es configurable. Whisper se libera antes y Ollama se descarga de memoria tras cada petición; detén otros modelos GPU para conservar VRAM. Si el servicio está apagado, se mantiene el análisis heurístico. Ollama recibe texto, no imágenes. La inferencia real con ese modelo sigue pendiente de validación.
 
-El lanzador `py` está instalado pero no encuentra un intérprete compatible. Instala Python 3.12 de 64 bits desde python.org, marca **Add python.exe to PATH**, completa la instalación y vuelve a abrir `Instalar.bat`. No hace falta instalar Python 3.11 además. La versión 0.2.0 comprueba que el intérprete realmente se ejecuta, permite usar Python del PATH sin depender de `py`, y no continúa hacia una ruta `.venv` inexistente. Si conserva un entorno incompleto, renombra únicamente `.venv` como `.venv-anterior` y vuelve a instalar; conserva `data/`.
+Deno y yt-dlp-ejs se instalan como componentes abiertos locales para el extractor de enlaces. No son servicios de IA remotos.
+
+## Edición y archivos
+
+Formatos 9:16, 1:1 y 16:9; hasta 1080×1920 o 1920×1080. Corrección de palabras y tiempos, subtítulos SRT/ASS, palabra activa resaltada, animación opcional, encuadre por centro/rostros o cámara y gameplay, zoom suave, fundidos y reducción configurable de silencios. Exportación individual o por lotes de aceptados. Cada efecto puede desactivarse.
+
+El encuadre facial es aproximado; no identifica personas ni al hablante activo. La región de cámara requiere confirmación. No hay editor multipista ni comprensión semántica completa del video.
+
+- **data/originales/**: copias de fuentes y audio original de podcasts.
+- **data/editados/**: MP4, SRT, ASS y decisiones de edición JSON.
+- **data/history.sqlite3**: biblioteca, progreso, candidatos y trabajos.
+- **data/modelos/**: caché de modelos al iniciar con el BAT.
+
+Los videos y transcripciones no se envían a IA remota. Las descargas de fuentes, modelos y dependencias sí necesitan internet. El servidor escucha solo en tu equipo y se inicia sin telemetría de Streamlit.
+
+## Probar y resolver problemas
+
+Para una prueba rápida, carga **examples/autorizado.mp4**, elige inglés y Tiny en Ajustes de creación. Es voz sintética con texto propio y patrón visual generado localmente, reutilizable bajo CC0.
+
+**Probar.bat** ejecuta las pruebas automatizadas. Para desarrollo, `examples/run_e2e.py` reproduce el flujo real con Tiny CPU y exporta un ejemplo de 1080×1920. El informe original se incluye en `examples/resultado/informe.json`.
+
+Si aparece «No runtime installed that matches 3.12», `py` existe pero no encuentra Python compatible. Instala el Python indicado arriba y vuelve a abrir Instalar.bat. El instalador también busca Python 3.11/3.12 de 64 bits en el PATH. Si hay una `.venv` incompleta, renombra únicamente esa carpeta como `.venv-anterior` y reintenta, conservando `data/`.
+
+## Código y licencias
+
+Código original MIT. Dependencias y modelos conservan sus licencias: `docs/LICENCIAS.md`. No se incluyen Python, FFmpeg, Ollama, CUDA ni pesos en el ZIP. CUDA/cuDNN son componentes propietarios gratuitos del fabricante y opcionales: CPU funciona sin ellos.
+
+Arquitectura y límites: `docs/ARQUITECTURA.md`. La interfaz utiliza un diseño propio y no copia marcas, recursos ni código de OpusClip.
+
+Para desarrollo: crea un entorno virtual, instala `pip install -r requirements.txt` y ejecuta `python -m streamlit run app.py --server.address 127.0.0.1 --browser.gatherUsageStats false`.

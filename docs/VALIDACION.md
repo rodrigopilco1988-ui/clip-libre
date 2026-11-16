@@ -1,4 +1,4 @@
-# Validación realizada · 16 de noviembre de 2026
+# Historial de validación · 16 de noviembre de 2026
 
 ## Entorno real
 
@@ -59,7 +59,7 @@ El primer intento de adjuntar el ZIP en el chat no pudo utilizar la ruta de sali
 
 Código: https://github.com/rodrigopilco1988-ui/clip-libre
 
-Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.1.2
+Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.2.0
 
 La Release enlaza el ZIP de código, documentación y ejemplos y `SHA256SUMS.txt`, guardados en la carpeta `distribucion/` del repositorio. Esta vía evita depender del servicio de subida de adjuntos de Releases, que rechazó la autenticación en esta sesión. El checksum se publica por separado para evitar una referencia circular dentro del ZIP. La existencia y descarga de esos adjuntos debe comprobarse al publicar. El ZIP no contiene entornos virtuales, pesos de modelos, ejecutables externos ni la base de datos con rutas de esta máquina.
 
@@ -81,3 +81,20 @@ Commit de código validado: `b5ae16b1c4bb917d287be01357d479ca6fad52db`.
 - Linux: **23 aprobadas y 3 omitidas en 8,42 s**; las omitidas requieren cmd.exe de Windows.
 - En Windows se ejecutó además `Instalar.bat --sin-pausa`: creó `.venv`, instaló las dependencias y mostró «Instalacion terminada». `pip check` confirmó dependencias consistentes. El registro se resume en `ci-0.1.2.txt`.
 - El modo sin pausa evita únicamente la tecla final para CI. No constituye prueba de Iniciar.bat, de la GPU ni de la máquina del usuario.
+
+## Versión 0.2.0: interfaz, enlaces y podcasts
+
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43972307282
+
+Commit de código probado: `1fd3c3904ce2958794d050b6f0504317ae7cdba5`.
+
+- Windows: **34 pruebas aprobadas en 16,85 s**.
+- Linux: **31 aprobadas y 3 omitidas, específicas de cmd.exe, en 12,07 s**.
+- `Instalar.bat --sin-pausa` volvió a completar la instalación en Windows con Deno y los componentes adicionales del extractor. `pip check` confirmó consistencia.
+- Nuevas pruebas: podcast de audio y original intacto, exportación subtitulada de ese podcast, dominios Twitch clips/YouTube Shorts y Live, comandos de VOD completo y tramos con descargador simulado, metadatos de directo y rechazos, HLS real por HTTP local con captura finita, mensajes de red/certificado/acceso y ejecución real local de JavaScript con Deno.
+- Streamlit AppTest verifica las cuatro opciones de fuente. Chromium headless comprobó el inicio, la selección Twitch y la pantalla Mis clips; se inspeccionó la captura del inicio terminado, sin los indicadores temporales de carga.
+- Flujo adicional con audio autorizado de voz sintética: 24,96 s, 70 palabras con Tiny CPU, exportación 720×1280 con audio y subtítulos, original preservado; 16,35 s totales en este entorno. Informe en `podcast-0.2.0.json`.
+
+No se descargó contenido de terceros para estas pruebas. Los intentos de consulta de metadatos reales fallaron: YouTube por bloqueo proxy 403 y Twitch por certificado no verificable en esta red. Se mantuvo TLS y no se eludió el bloqueo. Las pruebas controladas no sustituyen la validación de descargas/directos de esos proveedores. Consulta `FUENTES-0.2.0.md` para la matriz de compatibilidad y límites.
+
+Las secciones anteriores conservan el historial de versiones previas. Las capturas de interfaz con una tarjeta de demostración no prueban calidad de selección en videos reales ni anuncian una clonación de un producto de terceros.

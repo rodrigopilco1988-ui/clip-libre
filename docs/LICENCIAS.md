@@ -24,3 +24,11 @@ El código original se entrega bajo MIT. Esta lista no relicencia dependencias n
 - Voz Flite: motor con licencia permisiva, https://github.com/festvox/flite. El video de ejemplo y su texto se generaron para este proyecto y se ofrecen bajo CC0. No se distribuye el motor.
 
 Antes de redistribuir ejecutables o modelos, conserva sus licencias y avisos completos. El ZIP de esta entrega contiene solo código, documentación y material de prueba propio.
+
+## Componentes adicionales para fuentes en 0.2.0
+
+- deno 2.9.8: MIT.
+- yt-dlp-ejs 0.8.0: Unlicense AND MIT AND ISC.
+- mutagen 1.48.1: GPL-2.0-or-later.
+- pycryptodomex 3.24.2: BSD, Public Domain.
+- brotli 1.2.1: MIT.

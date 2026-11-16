@@ -24,3 +24,9 @@ Proyecto nuevo e independiente. Python 3.11/3.12 y Streamlit sirven la interfaz 
 ## Trabajo pendiente para una edición completa
 
 Validación de instalación interactiva en Windows y de RTX 3060, servicio Ollama real con Qwen3 4B, modelos Small/Medium, videos largos y concurrencia; pruebas autorizadas en YouTube/Twitch; captura incremental persistente de directos, detector de personas y hablante activo, seguimiento robusto y editor multipista. Cada avance requiere pruebas específicas y actualización del estado de validación.
+
+## Ampliación 0.2.0
+
+`import_local` admite audio y conserva una copia íntegra antes de crear la onda visual con FFmpeg. `inspect_url` consulta metadatos; `import_url` importa VOD completos o tramos. `capture_live` guarda segmentos finitos a partir de los flujos accesibles devueltos por el extractor, sin credenciales. La captura no tiene historial automático ni reanudación continua. Las previsualizaciones de candidatos se generan y cachean como archivos cortos: la UI no carga el video largo entero para reproducir un clip. La interfaz mantiene las herramientas del editor y añade creación automática tras importar. Deno y yt-dlp-ejs se instalan como dependencias locales para el extractor; el backend detecta el ejecutable del entorno virtual y lo comunica al extractor API y CLI.
+
+Los límites anteriores sobre tramos remotos finitos se amplían para permitir VOD completos. Se mantienen los límites de acceso de los proveedores y las limitaciones de análisis visual/seguimiento. El estado más reciente de las fuentes está en `FUENTES-0.2.0.md`.

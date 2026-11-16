@@ -1,0 +1,31 @@
+{
+  "analysis": {
+    "session": "2b0270b8538c4a30bf7869c57cdb5517",
+    "blocks": 1,
+    "processed_until": 24.96,
+    "elapsed_seconds": 2.894,
+    "rss_sampled_mb": 224.7,
+    "warnings": [],
+    "config": {
+      "block_minutes": 50,
+      "model": "tiny",
+      "device": "cpu",
+      "language": "en",
+      "ollama": false,
+      "ollama_model": "qwen3:4b",
+      "visual_step": 2,
+      "min_seconds": 12,
+      "max_seconds": 60,
+      "max_candidates": 20
+    }
+  },
+  "export": {
+    "duration": 24.966667,
+    "width": 720,
+    "height": 1280,
+    "audio": true
+  },
+  "words": 70,
+  "total_seconds": 16.35,
+  "original_audio_preserved": true
+}
