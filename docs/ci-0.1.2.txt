@@ -1,0 +1,9 @@
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43963645017
+Commit: b5ae16b1c4bb917d287be01357d479ca6fad52db
+Resultado: success en Windows y Linux
+
+tests (windows-latest)	Run python -m pytest -q	2026-11-16T21:49:27.4716224Z 26 passed in 16.58s
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-16T21:49:28.1582856Z Python compatible encontrado: py -3.12
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-16T21:50:14.1537679Z Instalacion terminada. Abre Iniciar.bat.
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-16T21:50:14.6132761Z No broken requirements found.
+tests (ubuntu-latest)	Run python -m pytest -q	2026-11-16T21:48:48.0796434Z 23 passed, 3 skipped in 8.42s
