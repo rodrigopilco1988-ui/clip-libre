@@ -1,0 +1,26 @@
+{
+  "edit": {
+    "aspect": "9:16",
+    "resolution": 1080,
+    "framing": "ajustar",
+    "center_x": 0.5,
+    "center_y": 0.5,
+    "zoom": 1.05,
+    "fade": true,
+    "burn": true,
+    "animated": true,
+    "font": "Arial",
+    "font_size": 54,
+    "color": "FFFF00",
+    "subtitle_position": 2,
+    "preset": "veryfast",
+    "streamer_roi": null
+  },
+  "intervals": [
+    [
+      0.0,
+      24.95
+    ]
+  ],
+  "source": "/workspace/work/clip-libre/examples/resultado/biblioteca/originales/b0ae52e96ea14fbca23d84b9252bcb21/autorizado.mp4"
+}

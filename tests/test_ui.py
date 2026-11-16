@@ -1,0 +1,37 @@
+from pathlib import Path
+from streamlit.testing.v1 import AppTest
+
+def test_empty_ui():
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    assert not app.exception
+    assert app.title[0].value=='Clip Libre'
+
+def test_ui_with_candidates(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'ui'))
+    s=Store(tmp_path/'ui'); sid=s.register(video)
+    s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),[dict(start=1.,end=6.,score=55,title='Prueba',hook='Hola',reason='Prueba',classification='heurística',visual_samples=1,words=[])])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    assert not app.exception
+    assert len(app.tabs)==4
+    accept=next(b for b in app.button if b.label=='Aceptar')
+    accept.click().run()
+    assert not app.exception
+    assert s.candidates(sid)[0]['state']=='aceptado'
+
+def test_ui_preview_and_export(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'ui'))
+    s=Store(tmp_path/'ui'); sid=s.register(video)
+    words=[dict(start=1.,end=2.,text='Prueba'),dict(start=3.,end=4.,text='autorizada')]
+    payload=dict(segments=[dict(start=1.,end=4.,text='Prueba autorizada',words=words)],audio=[],visual=[])
+    s.save_chunk(sid,'a',0,8,'cfg',payload,[dict(start=1.,end=6.,score=55,title='Prueba',hook='Hola',reason='Prueba',classification='heurística',visual_samples=1,words=words)])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(x for x in app.selectbox if x.label=='Resolución base').select(360).run()
+    next(b for b in app.button if b.label=='Generar vista previa editada').click().run(timeout=30)
+    assert not app.exception and not app.error
+    next(b for b in app.button if b.label=='Exportar clip con estos ajustes').click().run(timeout=30)
+    assert not app.exception and not app.error
+    with s.connect() as db:
+        row=db.execute('SELECT path FROM exports').fetchone()
+    assert row and Path(row[0]).exists()

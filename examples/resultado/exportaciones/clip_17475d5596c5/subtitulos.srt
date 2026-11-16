@@ -1,0 +1,47 @@
+1
+00:00:00,000 --> 00:00:02,320
+Welcome to this local editing test.
+
+2
+00:00:02,480 --> 00:00:04,660
+Look at this incredible surprise. We
+
+3
+00:00:04,660 --> 00:00:06,740
+have finally completed the challenge. That
+
+4
+00:00:06,740 --> 00:00:08,440
+was a very close call. Let
+
+5
+00:00:08,440 --> 00:00:10,120
+us watch the moment again. This
+
+6
+00:00:10,120 --> 00:00:12,040
+video was generated on this computer
+
+7
+00:00:12,040 --> 00:00:14,220
+for a permitted software test. No
+
+8
+00:00:14,220 --> 00:00:16,580
+private recording or copyrighted footage is
+
+9
+00:00:16,580 --> 00:00:18,640
+included. The clip editor should recognize
+
+10
+00:00:18,640 --> 00:00:21,120
+these words and create synchronized subtitles.
+
+11
+00:00:21,660 --> 00:00:23,060
+Now we can review the result
+
+12
+00:00:23,060 --> 00:00:24,620
+before exporting the video.

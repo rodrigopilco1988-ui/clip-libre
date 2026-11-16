@@ -1,0 +1,35 @@
+{
+  "analysis": {
+    "session": "b11f6580fdc24f8eb5b2292e3096c185",
+    "blocks": 1,
+    "processed_until": 24.95,
+    "elapsed_seconds": 5.258,
+    "rss_sampled_mb": 239.1,
+    "warnings": [],
+    "config": {
+      "block_minutes": 1,
+      "model": "tiny",
+      "device": "cpu",
+      "language": "en",
+      "ollama": false,
+      "ollama_model": "qwen3:4b",
+      "visual_step": 2,
+      "min_seconds": 12,
+      "max_seconds": 60,
+      "max_candidates": 20
+    }
+  },
+  "export_seconds": 14.453,
+  "total_seconds": 19.876,
+  "rss_peak_sampled_mb": 322.0,
+  "output": "resultado/exportaciones/clip_17475d5596c5/editado.mp4",
+  "media": {
+    "duration": 24.95,
+    "width": 1080,
+    "height": 1920,
+    "audio": true
+  },
+  "candidates": 1,
+  "words": 70,
+  "repeat_blocks": 0
+}
