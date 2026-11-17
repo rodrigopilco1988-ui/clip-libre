@@ -120,10 +120,11 @@ def test_ultrafast_never_transcribes_full_source_or_pollutes_asr_cache(video,tmp
     from cliplivre.pipeline import Analysis,analyze
     store=Store(tmp_path/'ultra');sid=store.register(video)
     def forbidden(*a): pytest.fail('Ultrarrápido no debe cargar Whisper')
-    config=Analysis(transcription=False,min_seconds=1,max_seconds=3,target_seconds=2,duration_variation=True,visual_step=2)
+    config=Analysis(model='tiny',transcription=False,min_seconds=1,max_seconds=3,target_seconds=2,duration_variation=True,visual_step=2)
     first=analyze(store,sid,config,transcriber=forbidden)
     assert first['devices']==['sin transcripción'] and first['transcriptions_reused']==0
-    assert store.artifact(sid,'asr-v2:small:es',0,8) is None
+    assert store.artifact(sid,'asr-v2:tiny:es',0,8) is None
+    assert store.compatible_transcript(sid,'tiny','es',0,8) is None
     assert all(1<=c['end']-c['start']<=3 for c in store.candidates(sid))
     assert analyze(store,sid,config,transcriber=forbidden)['blocks']==0
 

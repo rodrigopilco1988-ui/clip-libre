@@ -438,7 +438,8 @@ if sid:
             st.subheader('Editar y exportar')
             eligible=[c for c in candidates if c['state']!='descartado']
             if eligible:
-                cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=lambda k:next(c['title'] for c in eligible if c['id']==k),key='editor_clip_'+sid)
+                clip_labels={c['id']:f"Clip {i+1} · {clock(c['end']-c['start'])} · {c['title']}" for i,c in enumerate(eligible)}
+                cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=clip_labels.__getitem__,key='editor_clip_'+sid)
                 item=next(c for c in eligible if c['id']==cid); saved=item.get('edit_settings',{})
                 with st.container(border=True):
                     st.caption('POSICIÓN DEL RECORTE')

@@ -137,7 +137,7 @@ class Store:
             for row in reports:
                 try:
                     config=json.loads(row[0])['config']
-                    if config.get('model')!=model or config.get('language')!=language: continue
+                    if config.get('transcription') is False or config.get('model')!=model or config.get('language')!=language: continue
                     key=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()
                     old=c.execute('SELECT payload FROM chunks WHERE source=? AND config=? AND start=? AND end=?',(sid,key,start,end)).fetchone()
                     if old:

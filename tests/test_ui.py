@@ -218,3 +218,23 @@ def test_reused_vod_generates_without_network_metadata(video,tmp_path,monkeypatc
     next(x for x in app.checkbox if x.label.startswith('Tengo acceso permitido')).check().run()
     next(b for b in app.button if b.label=='Generar clips').click().run(timeout=30)
     assert not app.exception and not app.error and calls==[sid]
+
+
+def test_duplicate_titles_keep_selected_clip_for_deferred_subtitles(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    from cliplivre import transcribe
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'duplicate-title'))
+    store=Store(tmp_path/'duplicate-title');sid=store.register(video)
+    clips=[dict(start=1.,end=3.,score=90,title='Cambio de audio: revisar',reason='Prueba',classification='heurística',visual_samples=0,words=[]),dict(start=4.,end=6.,score=80,title='Cambio de audio: revisar',reason='Prueba',classification='heurística',visual_samples=0,words=[])]
+    store.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),clips)
+    wanted=next(c for c in store.candidates(sid) if c['start']==1)['id']
+    monkeypatch.setattr(transcribe,'transcribe',lambda *a,**kw:([dict(start=0.,end=1.,text='Prueba',words=[dict(start=.1,end=.9,text='Prueba')])],dict(device='cpu')))
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    app.session_state['workflow']='2 · Clips';app.run()
+    next(b for b in app.button if b.label=='Elegir y editar').click().run()
+    selector=next(x for x in app.selectbox if x.label=='Clip')
+    assert len(set(selector.options))==2 and selector.value==wanted
+    next(b for b in app.button if b.label=='Generar / actualizar subtítulos').click().run(timeout=30)
+    assert not app.exception and not app.error
+    assert next(x for x in app.selectbox if x.label=='Clip').value==wanted
+    assert next(c for c in store.candidates(sid) if c['id']==wanted)['edited_words'][0]['text']=='Prueba'
