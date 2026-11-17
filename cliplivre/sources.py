@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 import shutil
 import uuid
@@ -46,6 +47,21 @@ def validate_url(url):
     if u.scheme!='https' or u.hostname not in allowed or u.username or u.password or u.port not in {None,443}:
         raise ValueError('Pega un enlace HTTPS de YouTube o Twitch. Para otros podcasts, importa el archivo de audio o video.')
     return url
+
+
+def twitch_channel_videos(url):
+    """Enlace público a videos del canal; no consulta ni presume que haya VOD."""
+    try:
+        u=urlparse(validate_url(url))
+    except (ValueError,TypeError):
+        return None
+    parts=[p for p in u.path.split('/') if p]
+    if u.hostname not in {'twitch.tv','www.twitch.tv'} or len(parts)!=1:
+        return None
+    channel=parts[0]
+    if not re.fullmatch(r'[A-Za-z0-9_]{1,25}',channel) or channel.lower() in {'videos','directory','downloads','settings','search','subscriptions','inventory','wallet','turbo'}:
+        return None
+    return f'https://www.twitch.tv/{channel}/videos?filter=archives&sort=time'
 
 
 def local_deno():
@@ -126,7 +142,7 @@ def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible'
             raise ValueError('La recuperación histórica no está garantizada. Elige capturar desde ahora o usa el VOD.')
         if live_mode not in {'actual','historial','disponible'}: raise ValueError('Modo de directo inválido.')
         if live and live_mode!='actual' and 'twitch.tv' in urlparse(url).hostname:
-            raise ValueError('Ese enlace es un canal en vivo de Twitch, sin recuperación histórica accesible aquí. Para recuperar minutos anteriores, pega su video guardado: twitch.tv/videos/ID. No se sustituirá por una captura de cinco minutos.')
+            raise ValueError('Para sacar clips de lo que ya pasó, pega el video guardado de Twitch (twitch.tv/videos/ID). Para grabar lo que ocurra a partir de ahora, elige «Grabar desde ahora». El enlace del canal no permite recuperar aquí su historial.')
         if live and live_mode=='actual' and end is None:
             raise ValueError('Elige cuántos minutos quieres grabar desde ahora. No se aplican cinco minutos automáticamente.')
         if live and live_mode!='actual' and end is None:

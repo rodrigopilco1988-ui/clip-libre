@@ -1,6 +1,10 @@
-# Clip Libre · 0.4.0
+# Clip Libre · 0.4.1
 
 Estudio local para generar, revisar y editar clips. Interfaz original en español, sin créditos, suscripciones ni APIs de IA de pago. Usa únicamente material con acceso y permiso de reutilización.
+
+## Si pegas un canal de Twitch
+
+La app muestra las opciones antes de intentar importar: **Abrir videos guardados de este canal** para buscar un VOD y pegar su enlace, o **Grabar desde ahora** para capturar los próximos minutos elegidos. No empieza a grabar automáticamente. El canal por sí solo no permite recuperar aquí lo que ya pasó; si no hay VOD público, importa una grabación autorizada. Abrir la página de videos no garantiza que exista un VOD accesible.
 
 ## Tres pasos
 

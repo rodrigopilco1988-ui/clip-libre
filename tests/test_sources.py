@@ -19,7 +19,7 @@ def test_live_history_error_without_bypass(tmp_path,monkeypatch):
         def __exit__(self,*args): pass
         def extract_info(self,*args,**kwargs): return dict(is_live=True)
     monkeypatch.setattr(yt_dlp,'YoutubeDL',Y)
-    with pytest.raises(RuntimeError,match='histórica'):
+    with pytest.raises(RuntimeError,match='Grabar desde ahora'):
         import_url('https://www.twitch.tv/example',tmp_path,30,60,True)
 
 
@@ -77,9 +77,9 @@ def test_inspection_and_live_options(tmp_path,monkeypatch):
     from cliplivre import sources
     monkeypatch.setattr(sources,'extract_info',lambda url:dict(title='Canal',is_live=True))
     assert sources.inspect_url('https://www.twitch.tv/canal')['live']
-    with pytest.raises(RuntimeError,match='recuperación histórica'):
+    with pytest.raises(RuntimeError,match='video guardado de Twitch'):
         import_url('https://www.twitch.tv/canal',tmp_path,permission=True)
-    with pytest.raises(RuntimeError,match='recuperación histórica'):
+    with pytest.raises(RuntimeError,match='video guardado de Twitch'):
         import_url('https://www.twitch.tv/canal',tmp_path,0,60,True,live_mode='historial')
 
 

@@ -106,3 +106,10 @@ def test_analysis_range_is_not_clip_duration(video,tmp_path,monkeypatch):
     report=pipeline.analyze(s,sid,pipeline.Analysis(model='tiny',source_start=2,source_end=6,min_seconds=1,max_seconds=3,target_seconds=2),transcriber=lambda *a:pytest.fail('Debe reutilizar el bloque que cubre el tramo'))
     assert report['processed_until']==6 and report['transcriptions_reused']==1
     assert all(2<=c['start']<c['end']<=6 and 1<=c['end']-c['start']<=3 for c in s.candidates(sid))
+
+
+def test_channel_help_does_not_confuse_vod_clip_or_other_hosts():
+    from cliplivre.sources import twitch_channel_videos
+    assert twitch_channel_videos('https://www.twitch.tv/canal_prueba?x=1')=='https://www.twitch.tv/canal_prueba/videos?filter=archives&sort=time'
+    for url in ['https://www.twitch.tv/videos/123','https://clips.twitch.tv/Example','https://www.twitch.tv/canal/clip/Example','https://www.youtube.com/watch?v=test','https://www.twitch.tv.evil.example/canal','https://www.twitch.tv/directory','']:
+        assert twitch_channel_videos(url) is None

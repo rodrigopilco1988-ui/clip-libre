@@ -172,3 +172,22 @@ def test_first_screen_keeps_custom_thirty_to_ninety_and_stream_window(video,tmp_
     assert s.settings(sid)['clip_max']==90
     app.session_state['workflow']='1 · Fuente y ajustes'; app.run()
     assert next(x for x in app.text_input if x.label=='Máximo (min:seg)').value=='1:30'
+
+
+def test_twitch_channel_offers_vod_and_explicit_recording_before_import(tmp_path,monkeypatch):
+    from cliplivre import sources
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'twitch-help'))
+    monkeypatch.setattr(sources,'inspect_url',lambda *a: (_ for _ in ()).throw(AssertionError('No debe consultar la red al pegar el enlace')))
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(x for x in app.text_input if x.label=='Enlace de YouTube o Twitch').set_value('https://www.twitch.tv/canal_prueba').run()
+    next(x for x in app.checkbox if x.label.startswith('Tengo acceso permitido')).check().run()
+    assert not app.exception and not app.error
+    assert any('Este es el enlace del canal' in x.value for x in app.info)
+    assert next(b for b in app.button if b.label=='Generar clips').disabled
+    next(x for x in app.radio if x.label=='Captura').set_value('Grabar desde ahora').run()
+    assert not app.exception and not app.error
+    assert not next(b for b in app.button if b.label=='Generar clips').disabled
+    assert any(x.label=='Minutos a grabar desde ahora' for x in app.number_input)
+    next(x for x in app.radio if x.label=='Captura').set_value('Todo lo disponible').run()
+    next(x for x in app.text_input if x.label=='Enlace de YouTube o Twitch').set_value('https://www.twitch.tv/videos/123').run()
+    assert not app.exception and not next(b for b in app.button if b.label=='Generar clips').disabled

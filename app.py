@@ -6,7 +6,7 @@ import html
 import hashlib
 import streamlit as st
 from cliplivre.store import Store
-from cliplivre.sources import import_local,import_url,inspect_url,EXTENSIONS
+from cliplivre.sources import import_local,import_url,inspect_url,EXTENSIONS,twitch_channel_videos
 from cliplivre.pipeline import Analysis,analyze
 from cliplivre.render import Edit,render
 from cliplivre.media import probe,preview
@@ -258,6 +258,7 @@ with tabs[0]:
         with st.expander('Archivo de más de 200 MB'):
             path=st.text_input('Ruta del archivo en tu equipo',placeholder=r'C:\Videos\directo.mkv')
             st.caption('Puedes pegar la ruta copiada desde el Explorador de Windows.')
+    channel_videos=twitch_channel_videos(url) if mode=='Pegar enlace' else None
     duration=(local_info or remote_info).get('duration')
     origin=float(saved_source.get('import',{}).get('start',0)) if mode=='Proyecto actual' else 0.
     if origin and local_info: st.caption('Este archivo corresponde al stream desde '+clock(origin)+' hasta '+clock(origin+local_info['duration'])+'. Para otro tramo, pega de nuevo el enlace.')
@@ -289,6 +290,11 @@ with tabs[0]:
             st.caption('Archivo o VOD completo. En un directo activo, todo el historial que el proveedor permita recuperar. No se reemplaza por cinco minutos.')
         if mode=='Pegar enlace' and (remote_info.get('live') or capture_mode=='Grabar desde ahora'):
             st.caption('Para el pasado de Twitch usa el VOD /videos/ID. Un canal activo no entrega aquí su historial. YouTube Live necesita historial disponible.')
+    needs_vod=bool(channel_videos and capture_mode!='Grabar desde ahora')
+    if needs_vod:
+        st.info('Este es el enlace del canal. Para lo que ya pasó, abre sus videos guardados y pega el enlace del video elegido. Para lo que ocurra desde ahora, selecciona «Grabar desde ahora» arriba y elige cuántos minutos grabar.')
+        st.link_button('Abrir videos guardados de este canal',channel_videos)
+        st.caption('Si no hay video guardado público, importa una grabación autorizada. No se empieza a grabar sin que elijas esa opción.')
     with st.container(border=True):
         st.subheader('Duración de los clips que vas a generar')
         preset_names=list(PRESETS)
@@ -315,7 +321,7 @@ with tabs[0]:
             ollama_model=st.text_input('Modelo Ollama',value=saved_source.get('ollama_model','qwen3:4b'),key='ollama_model_'+str(ctx))
             st.caption('Los cambios de duración reutilizan la transcripción. Cambiar modelo o idioma puede requerir procesar de nuevo. No hay un segundo panel de análisis.')
     permission=st.checkbox('Tengo acceso permitido y permiso para procesar y reutilizar este contenido.')
-    if st.button('Generar clips',type='primary',disabled=not permission or bool(limits_error),width='stretch'):
+    if st.button('Generar clips',type='primary',disabled=not permission or bool(limits_error) or needs_vod,width='stretch'):
         new_sid=None
         try:
             if source_end is not None and source_end<=source_start: raise ValueError('El fin del stream debe ser posterior al inicio.')
