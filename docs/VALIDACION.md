@@ -153,3 +153,25 @@ Commit de código probado: `78c5645523de60f714311e0b0d2391f3ea1ad9a9`.
 Ensayo controlado sin pytest concurrente: recorte tardío de 4 s en fuente de 120 s, mismo libx264 ultrafast y 360×640, mediana de renderer anterior **1,0305 s** frente a nuevo **0,2765 s**. En ejemplo autorizado de 24,95 s, Tiny CPU y visión rápida: primer análisis **2,393 s**; tras cambiar duración y reutilizar resultados **0,005 s**, con dos aciertos de caché y una transcripción reutilizada. Memoria RSS muestreada al final 217,4 MB, no máximo del sistema. Ver rendimiento-0.3.0.json y CAMBIOS-0.3.0.md. No se extrapolan esos tiempos a videos largos, red o hardware del usuario.
 
 Limitaciones actuales: propuestas dentro de los límites de cada bloque, composición de zonas del mismo archivo mediante controles (sin arrastre ni multipista), guía estática y render de video a demanda; muestreo rápido puede perder cambios entre fotogramas clave. Procesamiento de audio, filtros y exportación libx264 siguen en CPU. Las limitaciones de proveedores remotos y validación física GPU anteriores se mantienen.
+
+## Versión 0.4.0: configuración única, límites y recorte interactivo
+
+Código: `1663ad2e96b62fb1a765c8f4a188106ec2b764a0`.
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/44003240521
+
+Prueba local completa: **74 aprobadas, 3 omitidas de Windows, 33,46 s**. CI final: **77 aprobadas en Windows (44,15 s)** y **74 aprobadas + 3 omitidas en Linux (29,20 s)**. Instalar.bat, RepararGPU.bat, carga real de DLL NVIDIA y pip check completados correctamente. Informe NVIDIA sin bibliotecas ausentes ni errores. No hubo inferencia en GPU física; registro íntegro `ci-0.4.0.txt`.
+
+- La pantalla inicial guarda una única configuración por proyecto. AppTest comprueba que 0:30–1:30 se convierte en 30–90 segundos, mientras que 30–110 minutos se convierte en 1800–6600 segundos de la fuente. No existe una pestaña adicional de configuración de análisis.
+- El clasificador respeta límites también en propuestas por audio/visión y transcripciones de un solo segmento largo; se prueban duraciones variadas. Los clips humanos incompatibles se conservan sin impedir nuevas alternativas dentro del rango.
+- Se prueban generación del comando de descarga completa y 30–110 minutos, ausencia del límite de 50 minutos y ausencia de sustitución oculta por cinco minutos. Twitch sin historial devuelve error; YouTube usa una instantánea histórica. Son pruebas controladas; no validan descarga real de los proveedores.
+- Se comprueba que un archivo importado parcialmente no se reutilice como VOD completo, que se unan bloques ASR previos solo cuando cubren todo el intervalo pedido y que SQLite conserve el análisis completo al regenerar candidatos.
+- Servidor HTTP local con pruebas reales GET/HEAD, rangos, sufijos, errores 404/416 y lectura acotada. Evita cargar todo el archivo o recodificar para verlo.
+- Exportación FFmpeg real de composición con foto, logo y títulos temporizados; se mantienen pruebas de 1/2/3 cuadros, subtítulos, audio, seek y exportación.
+
+### Flujo real en Chromium
+
+Fuente propia autorizada: patrón visual y voz sintética de `examples/autorizado.mp4`, repetido por copia de paquetes hasta 10 minutos. Tiny CPU, idioma inglés, pesos ya descargados. Generación desde el botón inicial: **20,79 s** hasta la galería. Ocho candidatos: **38,74; 76,86; 51,68; 65,96; 41,00; 76,90; 76,90; 51,84 s**. Todos cumplen 30–90 s; no todos duran el máximo.
+
+El mismo flujo eligió un clip, abrió el editor, esperó video decodificado, arrastró el recorte y reprodujo el video; guardó y comprobó SQLite. Coordenada horizontal normalizada de origen: **0,341796875 → 0,441796875**. Sin excepciones Streamlit ni errores JavaScript registrados. Informe `browser-0.4.0.json`; capturas `source-0.4.0.png`, `clips-0.4.0.png`, `editor-0.4.0.png` y `editor-recorte-0.4.0.png`.
+
+Es un ensayo sintético pequeño con contenido repetido, no un benchmark de streams reales ni una garantía de tiempo. El analizador registró 19,452 s y RSS muestreada de 330,8 MB (no máximo de memoria del sistema); informe `rendimiento-0.4.0.json`. La descarga remota real YouTube/Twitch, inferencia Ollama y aceleración en una RTX 3060 física siguen pendientes; se mantienen los límites documentados anteriormente. El recorte interactivo requiere un códec que el navegador pueda decodificar; FFmpeg ofrece vista previa compatible. La composición interactiva no sustituye la revisión del render final para tipografía, animaciones y seguimiento.

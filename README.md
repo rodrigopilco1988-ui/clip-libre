@@ -1,15 +1,19 @@
-# Clip Libre · 0.3.0
+# Clip Libre · 0.4.0
 
-Tu estudio local de clips: pega un enlace o carga un video o podcast, genera propuestas, revisa los momentos y exporta con subtítulos. Interfaz propia en español. Sin créditos, suscripciones ni APIs de IA de pago.
+Estudio local para generar, revisar y editar clips. Interfaz original en español, sin créditos, suscripciones ni APIs de IA de pago. Usa únicamente material con acceso y permiso de reutilización.
 
-## Lo nuevo en 0.3.0
+## Tres pasos
 
-- **Duraciones en minutos**, sin máximo artificial de 60 o 180 segundos. La duración mínima y la orientativa se configuran al importar o al reanalizar. «Sin límite máximo» está activado; si lo desmarcas, el máximo también se expresa en minutos.
-- **Todo el contenido importado** se analiza por defecto. Eso es independiente de cuánto dura cada clip. Para un directo pasado usa su archivo o VOD accesible; no se puede recuperar contenido que el proveedor no entrega.
-- **Mis clips → Elegir y editar** lleva directamente al editor y acepta ese clip para revisión. La salida inicial es vertical 9:16. Puedes añadir o quitar cuadros hasta tener uno, dos o tres; recortar la zona original y cambiar posición y tamaño de cada cuadro; añadir texto, corregir subtítulos y generar una vista previa editada.
-- **Menos trabajo repetido**: no se vuelve a transcribir al cambiar solo la duración de las propuestas, se cachean fotogramas y vistas previas, y FFmpeg salta directamente al inicio del clip en lugar de recorrer todo lo anterior. El muestreo visual rápido se solapa con Whisper.
+1. **Fuente y ajustes**: pega un enlace, carga un archivo o abre un proyecto. Elige la parte del stream, la duración de los clips y la velocidad. Confirma el permiso y pulsa **Generar clips**. Toda la configuración está aquí; se guarda por proyecto.
+2. **Clips**: revisa las propuestas y pulsa **Elegir y editar**. La puntuación es estimada, no garantiza viralidad.
+3. **Editor**: elige Vertical, Dúo, Tres cuadros o Foto + clip. Arrastra el recorte sobre el video. Añade títulos, logo y subtítulos. Guarda, revisa la vista previa editada y exporta.
 
-Cambiar la duración regenera propuestas pendientes automáticas, incluso si antes eran cortas. Se conservan las aceptadas, descartadas, editadas o exportadas. Para ampliar una de esas, abre el editor y cambia Inicio/Final en minutos.
+## Dos intervalos diferentes
+
+- **Parte del stream**: «Todo lo disponible» o «Elegir inicio y fin». Aquí los controles y la barra usan MINUTOS del stream: 30 → 110 equivale a 0:30:00 → 1:50:00. La barra aparece al conocer la duración del archivo o después de comprobar el enlace. Los bloques internos de 50 minutos no limitan el intervalo total.
+- **Duración de cada clip**: inicialmente **30–90 s · variado**. Personalizado usa **min:seg**: mínimo **0:30**, máximo **1:30**. Los nuevos candidatos respetan ambos límites y se intentan distintas duraciones dentro del rango. No se rellena una cuota de 20 ni se alargan todos al máximo. Puede haber menos candidatos si no hay suficiente material.
+
+Los clips guardados de una configuración anterior se conservan. La galería los oculta inicialmente si no cumplen los límites actuales; activa «Mostrar clips de otras configuraciones» para recuperarlos. Un recorte editado manualmente puede tener otra duración.
 
 ## Instalar una vez en Windows
 
@@ -23,7 +27,7 @@ Si ya utilizabas otra versión, conserva tu carpeta **data/**: contiene tus proy
 
 ## Preparar tu RTX 3060 (opcional, una vez)
 
-1. Abre **Crear clips → Preparar mi tarjeta NVIDIA para acelerar el análisis**.
+1. Abre el apartado lateral **Preparar mi tarjeta NVIDIA para acelerar el análisis**.
 2. Pulsa **Instalar o reparar soporte NVIDIA**. Descarga bibliotecas oficiales desde PyPI; puede superar 1,3 GB. Reserva unos 4 GB libres entre descarga y archivos instalados.
 3. Cierra y vuelve a abrir la aplicación.
 4. En el mismo apartado, pulsa **Probar transcripción en GPU**. La primera prueba puede descargar Tiny. Solo informa de éxito si termina una inferencia CUDA real; no recurre a CPU para esa prueba.
@@ -31,107 +35,55 @@ Si ya utilizabas otra versión, conserva tu carpeta **data/**: contiene tus proy
 
 También puedes cerrar la aplicación y ejecutar **RepararGPU.bat**, sin escribir comandos. Las bibliotecas se instalan dentro del entorno de Clip Libre; no se copian DLL a System32 ni se instala un controlador del sistema. Son componentes propietarios gratuitos de NVIDIA, opcionales para CPU. La transcripción en GPU sigue dependiendo de un controlador y hardware compatibles.
 
-## Crear tu primer clip
+## Velocidad y GPU
 
-1. Abre **Crear clips**.
-2. Elige **YouTube**, **Twitch**, **Podcast** o **Archivo local**.
-3. Pega el enlace o selecciona tu archivo. En videos muy grandes, abre «Mi archivo pesa más de 200 MB» y pega la ruta desde el Explorador de Windows.
-4. Confirma que tienes acceso y permiso para reutilizar el material.
-5. Pulsa **Crear clips**. La generación automática está activada inicialmente.
-6. Abre **Mis clips**: revisa la puntuación estimada y pulsa **Ver clip** para revisar el original. Pulsa **Elegir y editar** para preparar el clip vertical. También puedes aceptar o descartar propuestas.
-7. En **Editor y exportación**, ajusta el intervalo, corrige subtítulos, elige formato y encuadre, genera una vista previa y exporta.
+**Rápido** usa Tiny; **Equilibrado**, Small; **Calidad alta**, Medium. Base y el procesador se eligen en Más opciones. La primera descarga del modelo tarda más. Tiny prioriza tiempo y puede transcribir peor.
 
-Por defecto se analiza **todo el archivo o VOD importado**, guardando avances por bloques de 50 minutos. Puedes limitarlo a un bloque desmarcando la opción de analizar todo. Configurar análisis usa 0 bloques como «todos» y reanuda los ya confirmados. La puntuación no garantiza viralidad y los títulos requieren revisión humana.
+La reproducción y el recorte interactivo leen el archivo por rangos, sin recodificarlo entero ni cargarlo completo en memoria. Cambiar límites de clips reutiliza transcripciones compatibles, incluso de bloques previos que cubren el intervalo nuevo. No vuelve a descargar un VOD idéntico ya importado si el archivo existe. El análisis visual rápido trabaja en paralelo con la transcripción. El render final y los efectos aún requieren FFmpeg.
 
-## Qué contenido puedes introducir
+Ensayo real de navegador con 10 minutos de video sintético autorizado repetido: ocho clips entre 38,74 y 76,90 s en 20,79 s con Tiny CPU y pesos previamente descargados. No equivale a un directo real ni garantiza ese tiempo en otro equipo. No se dispone aquí de una RTX 3060 física para certificar aceleración. El botón de prueba CUDA comprueba tu equipo sin sustituir CPU por un éxito ficticio.
 
-| Contenido | Cómo introducirlo |
-|---|---|
-| YouTube, Shorts o un episodio publicado allí | Pega el enlace; elige video completo o tramo |
-| Twitch VOD | Pega el enlace `twitch.tv/videos/…` |
-| Clip de Twitch | Pega el enlace `clips.twitch.tv/…` |
-| Canal en directo | Pega el enlace y elige **capturar desde ahora** |
-| Video de tu disco | Carga MP4, MOV, MKV, WebM, AVI, M4V o TS |
-| Podcast de audio | Carga MP3, WAV, M4A, AAC, OGG, FLAC u OPUS |
-| Podcast en video | Carga su archivo de video o su enlace de YouTube/Twitch |
+Si falla CUDA, la app informa del cambio a CPU y conserva el progreso; CPU puede tardar más. Usa el apartado lateral de reparación NVIDIA. FFmpeg/libx264, OpenCV y el audio siguen en CPU. Los análisis se guardan por bloques en SQLite y se reanudan desde los bloques confirmados.
 
-**Comprobar enlace** consulta el título y detecta si está en directo. No confirma derechos ni garantiza la descarga posterior. Spotify, RSS y otros proveedores por enlace no están implementados; puedes importar un archivo autorizado.
+## Fuentes y directos
 
-Un podcast de audio conserva el original y obtiene una onda visual para crear clips en video con subtítulos.
+- Archivos de video: MP4, MKV, MOV, WebM, AVI, M4V y TS. Para archivos grandes, usa «Archivo de más de 200 MB» y pega la ruta de Windows, con o sin comillas.
+- Podcasts: MP3, WAV, M4A, AAC, OGG, FLAC y OPUS. Se conserva el audio y se genera una onda visual. No hay importador RSS ni Spotify.
+- Enlaces implementados mediante yt-dlp: videos/Shorts de YouTube, Twitch VOD `/videos/ID`, clips de Twitch y directos compatibles.
 
-### Directos y restricciones
+**Todo lo disponible** intenta descargar el archivo/VOD completo. En YouTube Live intenta una instantánea de todo el historial recuperable hasta el momento consultado; necesita DVR disponible. Para el pasado de un canal activo de Twitch, pega su VOD. Si no hay historial, aparece un error: no se sustituye por una grabación oculta de cinco minutos.
 
-La captura desde ahora guarda los próximos minutos elegidos: tarda lo mismo que la grabación. Si importas un directo sin elegir duración, se intenta una captura inicial de 5 minutos. No hay captura continua ni reanudación automática de streams.
+**Grabar desde ahora** es una opción explícita con duración en minutos. Graba el futuro en tiempo real y por eso tarda lo mismo que el intervalo pedido. No es captura continua ni recupera el pasado. No existe un límite oculto de 5 o 50 minutos. En importaciones parciales, el corte de descarga puede aproximarse al fotograma clave para evitar recodificar la fuente entera.
 
-YouTube Live permite **intentar** un tramo histórico cuando el proveedor ofrece DVR. Para el pasado de un directo activo de Twitch, utiliza su VOD. Nadie puede garantizar recuperación de contenido que el proveedor no entrega.
+Las rutas YouTube/Twitch están cubiertas por pruebas controladas y captura HLS local autorizada. La descarga real en esos proveedores sigue sin validarse: esta red bloqueó YouTube y falló TLS con Twitch. No se garantiza que cualquier enlace funcione. No se usan credenciales ni cookies ni se eluden DRM, autenticación o restricciones. Comprobar enlace consulta metadatos, no garantiza la descarga.
 
-No se usan cookies ni credenciales, no se eluden DRM, autenticación o restricciones y no se desactiva TLS. La descarga puede fallar por permisos, red, certificados, ausencia de historial o cambios de la plataforma. La UI muestra errores específicos.
+## Editor
 
-**Estado real:** las rutas remotas están implementadas y probadas con respuestas controladas y un flujo HLS local autorizado. Esta red bloqueó la consulta real a YouTube y falló la verificación TLS con Twitch. No se declara descarga real validada en esas plataformas. Los archivos locales y los podcasts sí tienen pruebas de extremo a extremo. Detalles: `docs/FUENTES-0.2.0.md` y `docs/VALIDACION.md`.
+El recorte sobre el video y la composición vertical se actualizan al arrastrar. Puedes añadir/quitar hasta tres cuadros, usar una foto en un cuadro y un logo del canal; añadir, duplicar o quitar títulos con tiempos y posición. Subtítulos con palabra activa, fuente, colores, tamaño y animación opcional. «Generar / actualizar subtítulos» reutiliza palabras disponibles o transcribe únicamente el intervalo elegido. Se pueden corregir texto y tiempos.
 
-## IA y hardware
+La composición interactiva ayuda a encuadrar. **Generar vista previa editada** ejecuta FFmpeg para revisar el resultado con efectos, animación y seguimiento. Algunos contenedores/códecs no se reproducen directamente en el navegador: usa la reproducción compatible del original o la vista previa editada. El tamaño, espaciado y fuente de la vista interactiva pueden diferir del render final.
 
-Small es la opción inicial de faster-whisper. Tiny reduce el tiempo de espera; Base y Medium también están disponibles. Los modelos se descargan la primera vez. Los bloques usan audio mono de 16 kHz (aprox. 192 MB por 50 minutos aparte de modelos y datos). Las muestras visuales son de 320×180.
+Se mantienen formatos 9:16, 1:1 y 16:9, exportación hasta 1080×1920, SRT/ASS, exportación por lotes, encuadre por rostro o cámara/gameplay, zoom, fundidos y reducción de silencios desactivables. El seguimiento facial es aproximado y no identifica al hablante. Los cuadros de video proceden de la misma fuente; no es un editor de varias pistas de video independientes.
 
-La RTX 3060 de 12 GB y los 32 GB de RAM son la referencia de configuración, sin rendimiento certificado en esa GPU. Para CUDA necesitas un controlador y las bibliotecas CUDA/cuDNN compatibles con CTranslate2: https://github.com/SYSTRAN/faster-whisper#gpu . Si CUDA devuelve un error, la aplicación libera el modelo y reintenta el bloque automáticamente en CPU. Informa del cambio y no vuelve a intentar la GPU durante esa sesión. Tras instalar o reparar CUDA, reinicia la aplicación para volver a probarla. La exportación usa libx264 en CPU.
+## IA local y datos
 
-Ollama es opcional. Instálalo desde https://ollama.com/ y prepara `qwen3:4b` desde su interfaz o una vez con `ollama pull qwen3:4b`. Actívalo en Configurar análisis. El modelo es configurable. Whisper se libera antes y Ollama se descarga de memoria tras cada petición; detén otros modelos GPU para conservar VRAM. Si el servicio está apagado, se mantiene el análisis heurístico. Ollama recibe texto, no imágenes. La inferencia real con ese modelo sigue pendiente de validación.
+Ollama es opcional: instálalo desde https://ollama.com/ y prepara `qwen3:4b` (una vez: `ollama pull qwen3:4b`). Actívalo en **Fuente y ajustes → Más opciones** y cambia el modelo si lo necesitas. Si está apagado, continúa el análisis heurístico. Recibe texto, no imágenes; la inferencia real con ese modelo sigue pendiente de validación. Los títulos requieren revisión humana.
 
-Deno y yt-dlp-ejs se instalan como componentes abiertos locales para el extractor de enlaces. No son servicios de IA remotos.
-
-## Edición y archivos
-
-Formatos 9:16, 1:1 y 16:9; hasta 1080×1920 o 1920×1080. Corrección de palabras y tiempos, subtítulos SRT/ASS, palabra activa resaltada, animación opcional, encuadre por centro/rostros o cámara y gameplay, zoom suave, fundidos y reducción configurable de silencios. Exportación individual o por lotes de aceptados. Cada efecto puede desactivarse.
-
-El encuadre facial es aproximado; no identifica personas ni al hablante activo. La región de cámara requiere confirmación. No hay editor multipista ni comprensión semántica completa del video.
-
-- **data/originales/**: copias de fuentes y audio original de podcasts.
-- **data/editados/**: MP4, SRT, ASS y decisiones de edición JSON.
-- **data/history.sqlite3**: biblioteca, progreso, candidatos y trabajos.
+- **data/originales/**: fuentes importadas y audio original de podcasts.
+- **data/editados/**: MP4, SRT, ASS y decisiones JSON.
+- **data/history.sqlite3**: proyectos, configuración, progreso y candidatos.
 - **data/modelos/**: caché de modelos al iniciar con el BAT.
 
-Los videos y transcripciones no se envían a IA remota. Las descargas de fuentes, modelos y dependencias sí necesitan internet. El servidor escucha solo en tu equipo y se inicia sin telemetría de Streamlit.
+Los medios y transcripciones no se envían a IA remota. Las fuentes, modelos y dependencias necesitan internet para descargarse. La app y el servidor de reproducción escuchan solo en tu equipo. No hay publicación automática.
 
-## Probar y resolver problemas
+## Pruebas y solución de problemas
 
-Para una prueba rápida, carga **examples/autorizado.mp4**, elige inglés y Tiny en Ajustes de creación. Es voz sintética con texto propio y patrón visual generado localmente, reutilizable bajo CC0.
+**Probar.bat** ejecuta pruebas automatizadas. `examples/autorizado.mp4` es una demostración CC0 creada localmente; dura menos de 30 segundos, así que para probarla usa el rango 15–30 s y el idioma inglés. `examples/run_e2e.py` reproduce transcripción y exportación real con Tiny CPU. Resultados y capturas: [docs/VALIDACION.md](docs/VALIDACION.md).
 
-**Probar.bat** ejecuta las pruebas automatizadas. Para desarrollo, `examples/run_e2e.py` reproduce el flujo real con Tiny CPU y exporta un ejemplo de 1080×1920. El informe original se incluye en `examples/resultado/informe.json`.
+Si aparece «No runtime installed that matches 3.12», instala el Python indicado arriba. El instalador también busca Python 3.11/3.12 de 64 bits en PATH. Si hay una .venv incompleta, renombra únicamente esa carpeta y reintenta, conservando data/.
 
-Si aparece «No runtime installed that matches 3.12», `py` existe pero no encuentra Python compatible. Instala el Python indicado arriba y vuelve a abrir Instalar.bat. El instalador también busca Python 3.11/3.12 de 64 bits en el PATH. Si hay una `.venv` incompleta, renombra únicamente esa carpeta como `.venv-anterior` y reintenta, conservando `data/`.
+Para actualizar: cierra completamente la versión anterior, extrae el ZIP en una carpeta nueva, copia **data/**, ejecuta **Instalar.bat** y después **Iniciar.bat**. No copies la .venv anterior.
 
-## Código y licencias
+Código original MIT. Licencias de dependencias y modelos: [docs/LICENCIAS.md](docs/LICENCIAS.md). No se incluyen Python, FFmpeg, Ollama, CUDA ni pesos. CUDA/cuDNN son componentes propietarios gratuitos opcionales; se descargan del proveedor y no se redistribuyen en el ZIP. CPU funciona sin ellos. El diseño es propio y no copia marcas, recursos ni código de OpusClip.
 
-Código original MIT. Dependencias y modelos conservan sus licencias: `docs/LICENCIAS.md`. No se incluyen Python, FFmpeg, Ollama, CUDA ni pesos en el ZIP. CUDA/cuDNN son componentes propietarios gratuitos del fabricante y opcionales: CPU funciona sin ellos.
-
-Arquitectura y límites: `docs/ARQUITECTURA.md`. La interfaz utiliza un diseño propio y no copia marcas, recursos ni código de OpusClip.
-
-Para desarrollo: crea un entorno virtual, instala `pip install -r requirements.txt` y ejecuta `python -m streamlit run app.py --server.address 127.0.0.1 --browser.gatherUsageStats false`.
-
-## Si aparece cublas64_12.dll o un error CUDA
-
-En 0.2.1, un fallo recuperable de CUDA ya no detiene el análisis: el bloque se reintenta en CPU, se informa del procesador utilizado y se conserva el progreso confirmado. No necesitas instalar CUDA para usar Clip Libre; CPU puede tardar más. Los resultados parciales del intento fallido se descartan para evitar palabras duplicadas.
-
-En versiones anteriores, selecciona **Configurar análisis → Procesador → cpu → Analizar minutos pendientes** para continuar. No borres tus proyectos. La aceleración GPU requiere todavía sus bibliotecas compatibles; esta actualización permite seguir trabajando cuando no están disponibles.
-
-## Corrección 0.2.2: Ver clip y rendimiento
-
-El botón **Ver clip** ya no reutiliza su clave como estado de apertura. Se probó el clic y la reproducción en Chromium, además de su permanencia al cambiar filtros. Las vistas previas se generan a 24 fps, se guardan de forma atómica y se reutilizan; un fallo no deja un archivo parcial que se confunda con una vista válida.
-
-La transcripción CPU usa una búsqueda más rápida (puede dar palabras algo distintas, por lo que conviene revisar subtítulos). Tiny aparece identificado como opción rápida y Small como equilibrada. Esto no convierte el resto del procesamiento en GPU: audio, OpenCV y exportación libx264 siguen usando CPU. Los resultados y límites están en `docs/VALIDACION.md`.
-
-## Editor: uno, dos o tres cuadros
-
-En Encuadre elige **Cuadros editables**. Usa Número de cuadros o Añadir/Quitar; dos cuadros se reparten inicialmente por mitades y tres por tercios. Puedes empezar arriba/abajo o lado a lado y después mover y redimensionar cada cuadro con porcentajes. Cada cuadro recorta una zona independiente del mismo video original: no es un editor multipista de varios archivos.
-
-En **Añadir texto propio** escribe el texto, elige color, tamaño y posición. Los subtítulos tienen sus propios controles de fuente, color de palabra activa, tamaño, posición y animación. La guía estática de encuadre cambia rápidamente sin recodificar el clip; subtítulos sincronizados, animación y seguimiento se revisan con **Generar vista previa editada**. El render idéntico se reutiliza si no cambias nada.
-
-**Guardar revisión y configuración** conserva los ajustes del clip. **Exportar clip con estos ajustes** produce el MP4. El lote aplica los ajustes actuales a los aceptados y conserva las palabras corregidas de cada uno. El original se mantiene separado.
-
-Las marcas de tiempo de las palabras se mantienen en segundos dentro del ajuste fino de sincronización; los controles principales de duración, inicio y final del clip usan minutos. Si amplías un clip a una zona no analizada, analiza primero los minutos pendientes para obtener sus subtítulos.
-
-## Rendimiento: qué se midió
-
-En un ensayo local controlado, recortar 4 s al final de un video de 2 min pasó de una mediana de 1,0305 s a 0,2765 s. Reanalizar el ejemplo autorizado de 24,95 s tras cambiar la duración reutilizó la transcripción: 0,005 s frente a 2,393 s del primer análisis Tiny CPU. Una exportación técnica real de 3,5 minutos con dos cuadros dio un MP4 de 210 s. Estos ejemplos no garantizan tiempos para directos largos, tu conexión o tu hardware. Detalles en `docs/CAMBIOS-0.3.0.md` y `docs/VALIDACION.md`.
-
-Al actualizar, cierra la aplicación por completo, conserva data/ y ejecuta Instalar.bat antes de volver a abrir Iniciar.bat. La tabla de caché se añade automáticamente a SQLite. Cuando se puede identificar el modelo y el idioma de un análisis anterior, se reutiliza su transcripción.
+Para desarrollo: instala `pip install -r requirements.txt` y ejecuta `python -m streamlit run app.py --server.address 127.0.0.1 --browser.gatherUsageStats false`.
