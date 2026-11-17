@@ -175,3 +175,18 @@ Fuente propia autorizada: patrón visual y voz sintética de `examples/autorizad
 El mismo flujo eligió un clip, abrió el editor, esperó video decodificado, arrastró el recorte y reprodujo el video; guardó y comprobó SQLite. Coordenada horizontal normalizada de origen: **0,341796875 → 0,441796875**. Sin excepciones Streamlit ni errores JavaScript registrados. Informe `browser-0.4.0.json`; capturas `source-0.4.0.png`, `clips-0.4.0.png`, `editor-0.4.0.png` y `editor-recorte-0.4.0.png`.
 
 Es un ensayo sintético pequeño con contenido repetido, no un benchmark de streams reales ni una garantía de tiempo. El analizador registró 19,452 s y RSS muestreada de 330,8 MB (no máximo de memoria del sistema); informe `rendimiento-0.4.0.json`. La descarga remota real YouTube/Twitch, inferencia Ollama y aceleración en una RTX 3060 física siguen pendientes; se mantienen los límites documentados anteriormente. El recorte interactivo requiere un códec que el navegador pueda decodificar; FFmpeg ofrece vista previa compatible. La composición interactiva no sustituye la revisión del render final para tipografía, animaciones y seguimiento.
+
+## Versión 0.4.1: guía antes de importar un canal Twitch
+
+Código probado: `13c7ba3dd8e4dd71b8ebb649e560ccaa41354ff5`.
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/44005078623
+
+Prueba local: **76 aprobadas, 3 omitidas específicas de Windows, 31,38 s**.
+
+La interfaz identifica localmente un enlace HTTPS de canal Twitch; no lo confunde con `/videos/ID`, clips, rutas reservadas ni otros dominios. Antes de importar, muestra un enlace a los videos públicos del canal y explica la grabación futura. Generar permanece desactivado para el intento de historial del canal y se habilita al elegir «Grabar desde ahora» con permiso confirmado. Cambiar al enlace de VOD devuelve el flujo normal. No graba ni consulta metadatos automáticamente por pegar el enlace.
+
+AppTest verifica las transiciones sin acceso a red. Chromium real comprueba el href de videos del canal, bloqueo/habilitación del botón y aparición del control de minutos de grabación, sin excepción Streamlit. Captura `twitch-ayuda-0.4.1.png`. El backend conserva el rechazo de historial inaccesible y su mensaje ofrece ambas alternativas.
+
+Esta validación no descarga ni graba Twitch real, no garantiza que exista un VOD público y no añade recuperación histórica de un canal activo. No altera las restricciones de acceso ni la duración elegida por el usuario.
+
+CI final 0.4.1: **79 aprobadas en Windows (38,54 s)**; **76 aprobadas y 3 omitidas en Linux (29,26 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; DLL NVIDIA cargadas sin errores ni bibliotecas ausentes. Sin inferencia en una GPU física. Registro `ci-0.4.1.txt`.
