@@ -66,6 +66,9 @@ def media_server(): return MediaServer()
 
 def player_html(url,start=0,end=None):
     import json
+    if end is not None:
+        if not 0<=start<end: raise ValueError('Intervalo de vista previa inválido.')
+        return clip_player_html(url,start,end)
     return '''<style>body{margin:0;background:#0d1017}video{display:block;width:100%;max-height:440px;background:#05070c;border-radius:10px}</style>
 <video controls playsinline preload="metadata"></video><script>
 const video=document.querySelector('video');
@@ -74,4 +77,27 @@ video.addEventListener('loadedmetadata',()=>{if(begin>0)video.currentTime=begin;
 video.addEventListener('timeupdate',()=>{if(finish!==null&&video.currentTime>=finish){video.pause();video.currentTime=finish;}});
 video.addEventListener('play',()=>{if(finish!==null&&video.currentTime>=finish-.05)video.currentTime=begin;});
 video.addEventListener('seeking',()=>{if(video.currentTime<begin)video.currentTime=begin;});
+</script>'''
+
+
+def clip_player_html(url,start,end):
+    """Cronología relativa al clip; nunca muestra la duración del directo completo."""
+    import json
+    return '''<style>body{margin:0;background:#0d1017;color:#eee;font:14px Arial}video{display:block;width:100%;max-height:390px;background:#05070c;border-radius:10px} .bar{display:flex;gap:10px;align-items:center;padding:10px 2px}button{background:#26354b;color:white;border:0;border-radius:6px;padding:8px}input{flex:1;min-width:30px}output{white-space:nowrap}</style>
+<video playsinline preload="metadata"></video><div class="bar"><button id="play" aria-label="Reproducir clip">▶</button><output id="time">Cargando clip…</output><input id="seek" aria-label="Posición dentro del clip" type="range" min="0" step="0.05" value="0"><button id="mute" aria-label="Silenciar clip">Audio: sí</button></div>
+<script>
+const video=document.querySelector('video'),seek=document.querySelector('#seek'),button=document.querySelector('#play'),time=document.querySelector('#time');
+const begin='''+json.dumps(start)+''',finish='''+json.dumps(end)+''',length=finish-begin;
+const clock=t=>{t=Math.max(0,Math.round(t));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')};
+seek.max=length;time.textContent='0:00 / '+clock(length);
+function update(){const relative=Math.max(0,Math.min(length,video.currentTime-begin));seek.value=relative;time.textContent=clock(relative)+' / '+clock(length);button.textContent=video.paused?'▶':'❚❚';button.setAttribute('aria-label',video.paused?'Reproducir clip':'Pausar clip')}
+video.addEventListener('loadedmetadata',()=>{video.currentTime=begin;update()});
+video.addEventListener('timeupdate',()=>{if(video.currentTime>=finish){video.pause();video.currentTime=Math.max(begin,finish-.001)}update()});
+video.addEventListener('seeking',()=>{if(video.currentTime<begin-.001)video.currentTime=begin;else if(video.currentTime>finish){video.pause();video.currentTime=finish-.001}update()});
+video.addEventListener('play',()=>{if(video.currentTime>=finish-.08)video.currentTime=begin;update()});video.addEventListener('pause',update);
+button.onclick=()=>{if(video.paused){if(video.currentTime>=finish-.08)video.currentTime=begin;video.play().catch(()=>{})}else video.pause()};
+video.onclick=()=>button.click();seek.oninput=()=>{video.currentTime=begin+Math.min(length-.001,Math.max(0,Number(seek.value)));update()};
+document.querySelector('#mute').onclick=()=>{video.muted=!video.muted;document.querySelector('#mute').textContent=video.muted?'Audio: no':'Audio: sí'};
+video.addEventListener('error',()=>{time.textContent='Formato no reproducible: usa Reproducción compatible debajo.'});
+video.src='''+json.dumps(url)+''';
 </script>'''

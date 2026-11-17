@@ -60,7 +60,10 @@ def test_view_clip_button_and_persistent_open_state(video,tmp_path,monkeypatch):
     next(b for b in app.button if b.label=='Ver clip').click().run(timeout=30)
     assert not app.exception and not app.error
     assert app.session_state['view_open_'+s.candidates(sid)[0]['id']]
-    assert not list((tmp_path/'view-regression').glob('vistas_previas/*.mp4'))
+    previews=list((tmp_path/'view-regression').glob('vistas_previas/*.mp4'))
+    from cliplivre.media import probe
+    assert len(previews)==1 and abs(probe(previews[0])['duration']-3)<.15
+    assert any('Duración: 0:03' in x.value for x in app.caption)
     next(x for x in app.slider if x.label=='Puntuación mínima').set_value(10).run(timeout=30)
     assert not app.exception and not app.error
 

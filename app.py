@@ -48,9 +48,10 @@ def direct_player(path,start=0,end=None):
 
 
 def show_clip(path,start,end):
-    direct_player(path,start,end)
-    if Path(path).suffix.lower() not in {'.mp4','.m4v','.webm'}:
-        if st.button('Generar reproducción compatible',key=hashlib.sha256(f'{path}{start}{end}'.encode()).hexdigest()): legacy_show_clip(path,start,end)
+    from cliplivre.media import clip_preview
+    with st.spinner('Abriendo solo este clip…'):
+        excerpt=clip_preview(path,start,end,ROOT/'vistas_previas')
+    direct_player(excerpt,0,end-start)
 
 
 def new_project():
@@ -310,8 +311,9 @@ with tabs[0]:
         except ValueError as e: limits_error=str(e); clip_min,clip_max=30.,90.; st.error(limits_error)
         st.caption('Clips de '+clock(clip_min)+' a '+(clock(clip_max) if clip_max is not None else 'sin máximo')+'. Las duraciones varían dentro del rango elegido; no se generan clips por encima del máximo.')
         title_hint=st.text_input('Título del proyecto (opcional)',value=saved_source.get('title',''),key='project_title_'+str(ctx))
-        profile_names=['Rápido','Equilibrado','Calidad alta']
-        speed=st.selectbox('Velocidad',profile_names,index=profile_names.index(saved_source.get('speed','Rápido')),key='speed_'+str(ctx))
+        profile_names=['Ultrarrápido','Rápido','Equilibrado','Calidad alta']
+        speed=st.selectbox('Velocidad',profile_names,index=profile_names.index(saved_source.get('speed','Ultrarrápido')),key='speed_'+str(ctx))
+        if speed=='Ultrarrápido': st.info('Detecta audio y cambios visuales sin transcribir todo el directo. Elige un clip y genera sus subtítulos en el editor. Menos contexto de conversación; no interpreta lo que ocurre en las imágenes.')
         with st.expander('Más opciones'):
             lang_options=['es','en','auto']
             language=st.selectbox('Idioma',lang_options,index=lang_options.index(saved_source.get('language','es')),key='language_'+str(ctx))
@@ -366,7 +368,7 @@ with tabs[0]:
                     raise ValueError('El tramo dura '+clock(window_length)+' y el mínimo elegido es '+clock(clip_min)+'. Elige una duración menor para generar clips.')
                 bar=st.progress(0.)
                 def update(f,m): bar.progress(max(0.,min(1.,f))); status.update(label=m)
-                config=Analysis(fast_asr=speed=='Rápido',model=({'Rápido':'tiny','Equilibrado':'small','Calidad alta':'medium'}[speed] if override_model=='Según velocidad' else override_model),device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=clip_min,max_seconds=clip_max,target_seconds=(clip_min+clip_max)/2 if clip_max is not None else max(clip_min,180),duration_variation=True,visual_step=8 if speed=='Rápido' else 2,visual_fast=speed=='Rápido',source_start=analysis_start,source_end=analysis_end)
+                config=Analysis(transcription=speed!='Ultrarrápido',fast_asr=speed in {'Rápido','Ultrarrápido'},model=({'Ultrarrápido':'tiny','Rápido':'tiny','Equilibrado':'small','Calidad alta':'medium'}[speed] if override_model=='Según velocidad' else override_model),device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=clip_min,max_seconds=clip_max,target_seconds=(clip_min+clip_max)/2 if clip_max is not None else max(clip_min,180),duration_variation=True,visual_step=8 if speed in {'Rápido','Ultrarrápido'} else 2,visual_fast=speed in {'Rápido','Ultrarrápido'},source_start=analysis_start,source_end=analysis_end)
                 report=analyze(store,new_sid,config,update)
                 status.update(label='Clips listos',state='complete')
             st.session_state['pending_project']=new_sid
@@ -413,7 +415,7 @@ if sid:
                 with st.container(border=True):
                     st.markdown(f"<span class='cl-score'>{item['score']}</span> <span style='color:#aeb8c9'>/ 100 · interés estimado</span>",unsafe_allow_html=True)
                     st.subheader(item['title'])
-                    st.caption(f"{item['start']/60:.2f}–{item['end']/60:.2f} min · {(item['end']-item['start'])/60:.2f} min de duración · {item['state']}")
+                    st.caption(f"Duración: {clock(item['end']-item['start'])} · En el directo: {clock(item['start'])} → {clock(item['end'])} · {item['state']}")
                     st.write(item['reason'])
                     if st.button('Ver clip',key='view_button_'+item['id']): st.session_state['view_open_'+item['id']]=True
                     if tabs[1].open and st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])

@@ -23,6 +23,7 @@ class Analysis:
     target_seconds: float = 180
     max_candidates: int = 20
     duration_variation: bool = False
+    transcription: bool = True
     fast_asr: bool = False
     source_start: float = 0
     source_end: float | None = None
@@ -49,24 +50,26 @@ def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcri
     try:
         while cursor<range_end-.01 and (max_blocks is None or blocks<max_blocks):
             end=min(range_end,cursor+config.block_minutes*60)
-            progress((cursor-range_start)/(range_end-range_start),f'Transcribiendo {cursor/60:.1f}–{end/60:.1f} min')
+            progress((cursor-range_start)/(range_end-range_start),f'Analizando {cursor/60:.1f}–{end/60:.1f} min')
             from concurrent.futures import ThreadPoolExecutor
             stage_start=time.perf_counter()
-            asr_key=f'asr-v2:{config.model}:{config.language}'
+            asr_key=f'asr-v2:{config.model}:{config.language}' if config.transcription else 'audio-only-v1'
             visual_key=f'visual-v2:{config.visual_step}:{config.visual_fast}'
             cached=store.artifact(sid,asr_key,cursor,end)
-            if cached is None:
+            if cached is None and config.transcription:
                 cached=store.compatible_transcript(sid,config.model,config.language,cursor,end)
                 if cached is not None: store.save_artifact(sid,asr_key,cursor,end,cached)
             visual=store.artifact(sid,visual_key,cursor,end)
             with ThreadPoolExecutor(max_workers=1) as worker:
                 visual_job=worker.submit(visual_features,source['path'],cursor,end,config.visual_step,False,config.visual_fast) if visual is None else None
                 if cached:
-                    segments=cached['segments']; audio=cached['audio']; metadata=cached['metadata']; cache_hits+=1; reused_transcriptions+=1
-                    progress((cursor-range_start)/(range_end-range_start),'Reutilizando transcripción guardada…')
+                    segments=cached['segments']; audio=cached['audio']; metadata=cached['metadata']; cache_hits+=1; reused_transcriptions+=int(config.transcription)
+                    progress((cursor-range_start)/(range_end-range_start),'Reutilizando análisis guardado…')
                 else:
                     samples=media.audio(source['path'],cursor,end-cursor) if info['audio'] else []
-                    if len(samples):
+                    if len(samples) and not config.transcription:
+                        segments,metadata=[],dict(device='sin transcripción',transcription='pendiente para el clip elegido')
+                    elif len(samples):
                         if transcriber:
                             segments,metadata=transcriber(samples,config.model,config.device,config.language)
                         else:

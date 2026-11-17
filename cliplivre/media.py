@@ -49,3 +49,15 @@ def preview(path, start, end, output):
 
 def frame(path,time,width=960):
     return run(['ffmpeg','-v','error','-ss',time,'-i',path,'-frames:v','1','-vf',f'scale={width}:-2','-f','image2pipe','-vcodec','png','pipe:1'])
+
+
+def clip_preview(path,start,end,folder):
+    """MP4 horizontal corto, creado solo al abrir y reutilizado sin releer toda la fuente."""
+    import hashlib
+    source=Path(path).resolve(); stat=source.stat()
+    if not 0<=start<end: raise ValueError('Intervalo de clip inválido.')
+    key=hashlib.sha256(f'{source}:{stat.st_size}:{stat.st_mtime_ns}:{start:.6f}:{end:.6f}:preview-v2'.encode()).hexdigest()
+    folder=Path(folder); folder.mkdir(parents=True,exist_ok=True)
+    output=folder/(key+'.mp4')
+    if not output.exists(): preview(source,start,end,output)
+    return output

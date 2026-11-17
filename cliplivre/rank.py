@@ -48,15 +48,19 @@ def propose(segments, audio, visual, start, end, limit=20, min_seconds=30, max_s
              hook=words[:120],reason=f'Energía {energy:.2f}; variación de audio {change:.2f}; cambio visual {scene:.2f}. Estimación heurística.',
              evidence=words,classification='heurística',words=all_words[bisect_left(word_times,a):bisect_left(word_times,b)],visual_samples=len(frames)))
     # También encuentra cambios sin diálogo. No les atribuye acontecimientos semánticos.
+    def fallback_length(index):
+        if vary and max_seconds is not None and max_seconds>min_seconds:
+            return min_seconds+(max_seconds-min_seconds)*(.2,.65,.4,.85,.3,.55,.75,.1)[index%8]
+        return max(min_seconds,15)
     if not pool:
-        for f in sorted(audio,key=lambda x:x['change'],reverse=True)[:40]:
-            a=max(start,f['time']-3); b=min(end,a+max(min_seconds,15))
+        for index,f in enumerate(sorted(audio,key=lambda x:x['change'],reverse=True)[:40]):
+            a=max(start,f['time']-3); b=min(end,a+fallback_length(index))
             if b-a>=5 and not f['silence']:
                 pool.append(dict(start=a,end=b,score=min(65,round(25+f['change'])),title='Cambio de audio: revisar',hook='',reason='Variación acústica sin evidencia verbal. Requiere revisión.',evidence='',classification='heurística',words=[],visual_samples=0))
     if not pool:
-        for frame in sorted(visual,key=lambda f:f['scene'],reverse=True)[:40]:
+        for index,frame in enumerate(sorted(visual,key=lambda f:f['scene'],reverse=True)[:40]):
             if frame['scene']<.3: continue
-            a=max(start,frame['time']-3); b=min(end,a+max(min_seconds,15))
+            a=max(start,frame['time']-3); b=min(end,a+fallback_length(index))
             if b-a>=5:
                 pool.append(dict(start=a,end=b,score=round(30+frame['scene']*30),title='Cambio visual: revisar',hook='',reason='Cambio de distribución visual, sin interpretación semántica.',evidence='',classification='heurística visual',words=[],visual_samples=1))
     chosen=[]

@@ -114,3 +114,23 @@ def test_channel_help_does_not_confuse_vod_clip_or_other_hosts():
     assert twitch_channel_videos('https://www.twitch.tv/canal_prueba?x=1')=='https://www.twitch.tv/canal_prueba/videos?filter=archives&sort=time'
     for url in ['https://www.twitch.tv/videos/123','https://clips.twitch.tv/Example','https://www.twitch.tv/canal/clip/Example','https://www.youtube.com/watch?v=test','https://www.twitch.tv.evil.example/canal','https://www.twitch.tv/directory','']:
         assert twitch_channel_videos(url) is None
+
+
+def test_ultrafast_never_transcribes_full_source_or_pollutes_asr_cache(video,tmp_path):
+    from cliplivre.pipeline import Analysis,analyze
+    store=Store(tmp_path/'ultra');sid=store.register(video)
+    def forbidden(*a): pytest.fail('Ultrarrápido no debe cargar Whisper')
+    config=Analysis(transcription=False,min_seconds=1,max_seconds=3,target_seconds=2,duration_variation=True,visual_step=2)
+    first=analyze(store,sid,config,transcriber=forbidden)
+    assert first['devices']==['sin transcripción'] and first['transcriptions_reused']==0
+    assert store.artifact(sid,'asr-v2:small:es',0,8) is None
+    assert all(1<=c['end']-c['start']<=3 for c in store.candidates(sid))
+    assert analyze(store,sid,config,transcriber=forbidden)['blocks']==0
+
+
+def test_audio_only_durations_vary_within_thirty_to_ninety():
+    features=[dict(time=float(t),db=-15,change=float(t%9+1),silence=False) for t in range(600)]
+    clips=propose([],features,[],0,600,min_seconds=30,max_seconds=90,target_seconds=60,vary=True)
+    lengths=[c['end']-c['start'] for c in clips]
+    assert len(clips)>2 and all(30<=n<=90 for n in lengths) and len(set(lengths))>1
+    assert all(not c['words'] and not c['evidence'] for c in clips)
