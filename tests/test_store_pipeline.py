@@ -78,3 +78,24 @@ def test_long_clips_have_no_sixty_or_180_second_limit():
     segments=[dict(start=float(i),end=float(i+20),text='Conversación con contexto',words=[]) for i in range(0,600,20)]
     result=propose(segments,[],[],0,600,min_seconds=240,max_seconds=None,target_seconds=300)
     assert result and result[0]['end']-result[0]['start']>=300
+
+
+def test_longer_proposals_replace_automatic_short_ones(video,tmp_path):
+    s=Store(tmp_path/'replace'); sid=s.register(video)
+    s.save_chunk(sid,'old',0,8,'old',{},[dict(start=0,end=2,title='Corto'),dict(start=3,end=5,title='Otro corto')])
+    s.save_chunk(sid,'new',0,8,'new',{},[dict(start=0,end=7,title='Contexto largo')])
+    candidates=s.candidates(sid)
+    assert len(candidates)==1 and candidates[0]['end']==7 and candidates[0]['title']=='Contexto largo'
+
+
+@pytest.mark.parametrize('protection',['aceptado','descartado','editado','exportado'])
+def test_regeneration_preserves_human_work(video,tmp_path,protection):
+    s=Store(tmp_path/protection); sid=s.register(video)
+    s.save_chunk(sid,'old',0,8,'old',{},[dict(start=1,end=3,title='Conservar')])
+    item=s.candidates(sid)[0]
+    if protection in {'aceptado','descartado'}: s.update(item['id'],state=protection)
+    if protection=='editado': s.update(item['id'],payload=dict(item,edited_words=[]))
+    if protection=='exportado': s.export(item['id'],video,{})
+    s.save_chunk(sid,'new',0,8,'new',{},[dict(start=0,end=7,title='Nuevo')])
+    preserved=s.candidates(sid)
+    assert len(preserved)==1 and preserved[0]['title']=='Conservar' and preserved[0]['start']==1

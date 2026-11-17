@@ -55,10 +55,22 @@ class Store:
         # El progreso y los candidatos se confirman juntos, solo después de completar el bloque.
         with self.connect() as c:
             for item in candidates:
-                overlap = c.execute('SELECT 1 FROM candidates WHERE source=? AND start < ? AND end > ?', (sid,item['end'],item['start'])).fetchone()
-                if not overlap:
-                    cid = uuid.uuid4().hex
-                    c.execute('INSERT INTO candidates(id,source,start,end,payload) VALUES(?,?,?,?,?)', (cid,sid,item['start'],item['end'],json.dumps(item,ensure_ascii=False)))
+                overlaps=c.execute('SELECT * FROM candidates WHERE source=? AND start < ? AND end > ? ORDER BY start',(sid,item['end'],item['start'])).fetchall()
+                if not overlaps:
+                    cid=uuid.uuid4().hex
+                    c.execute('INSERT INTO candidates(id,source,start,end,payload) VALUES(?,?,?,?,?)',(cid,sid,item['start'],item['end'],json.dumps(item,ensure_ascii=False)))
+                    continue
+                protected=False
+                for row in overlaps:
+                    payload=json.loads(row['payload'])
+                    has_export=c.execute('SELECT 1 FROM exports WHERE candidate=? LIMIT 1',(row['id'],)).fetchone()
+                    if row['state']!='pendiente' or 'edited_words' in payload or 'edit_settings' in payload or has_export:
+                        protected=True; break
+                if not protected:
+                    # Una nueva duración sustituye propuestas automáticas, no trabajo humano.
+                    keeper=overlaps[0]['id']
+                    for row in overlaps[1:]: c.execute('DELETE FROM candidates WHERE id=?',(row['id'],))
+                    c.execute('UPDATE candidates SET start=?,end=?,payload=? WHERE id=?',(item['start'],item['end'],json.dumps(item,ensure_ascii=False),keeper))
             c.execute('INSERT OR REPLACE INTO chunks VALUES(?,?,?,?,?,?)', (sid,session,start,end,config,json.dumps(payload,ensure_ascii=False)))
     def candidates(self, sid):
         with self.connect() as c:
