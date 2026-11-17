@@ -1,6 +1,22 @@
-# Clip Libre · 0.7.0
+# Clip Libre · 0.8.0
 
 Estudio local para generar, revisar y editar clips. Interfaz original en español, sin créditos, suscripciones ni APIs de IA de pago. Usa únicamente material con acceso y permiso de reutilización.
+
+## Progreso visible y VOD completo (0.8.0)
+
+El panel **Estado del procesamiento** muestra la etapa actual, su porcentaje cuando se puede medir, tiempo total transcurrido y restante estimado de esa etapa. Usa bytes, fragmentos, segundos de FFmpeg o posiciones de Whisper; no rellena una barra con un temporizador ficticio. Antes de tener tamaño/velocidad muestra **calculando**. La estimación puede cambiar y no es el tiempo total de todas las etapas futuras. También funciona mientras se prepara una descarga directa en segundo plano.
+
+Si una fuente aparece con cuatro horas aunque el VOD sea más largo:
+
+1. Abre el proyecto y pulsa **Actualizar desde el enlace · revisar duración completa**; o pega de nuevo el enlace y pulsa **Comprobar enlace**.
+2. Comprueba la **Duración anunciada por el enlace**. El VOD Twitch `2926826151` anuncia **8:04:10** y su playlist pública contiene esa duración completa.
+3. Elige **Todo lo disponible**, o **Usar todo el intervalo disponible** si estabas seleccionando un tramo. La barra usa la duración detectada completa; no tiene un tope de cuatro horas.
+
+Al volver a pegar una URL se actualizan sus metadatos si no hay una comprobación reciente (cinco minutos). Un archivo más corto que la duración esperada no se reutiliza como completo. Si una descarga nueva queda incompleta, se guarda el proyecto parcial y se avisa: no se presenta como el VOD entero ni se borra tu archivo anterior. Actualizar puede requerir volver a descargar el VOD completo; no implementa unión incremental de descargas parciales.
+
+Para reducir la espera: **Ultrarrápido** y, si aceptas menor resolución de origen, **Calidad del video que se descargará → 360p · descarga más ligera**. Reduce datos, no minutos. La opción inicial de descarga conserva 1080p como máximo; no baja calidad sin que la elijas. Descargar ocho horas puede requerir varios GB y no se garantiza terminar todo en dos minutos. El panel distingue esa descarga del análisis local.
+
+Metadatos y playlist de ese VOD, y un fragmento posterior a la cuarta hora, se consultaron con TLS verificado mediante certificados del sistema. No se desactiva la verificación TLS ni se usan credenciales. No se validó descargar sus ocho horas completas: un intento estándar de importar un rango corto con yt-dlp/FFmpeg terminó sin video válido en esta red. Detalles y alcance exacto en docs/VALIDACION.md; no se garantiza cualquier enlace ni Twitch Live.
 
 ## Descargar para CapCut y cuadros estables (0.7.0)
 
@@ -88,7 +104,7 @@ Si falla CUDA, la app informa del cambio a CPU y conserva el progreso; CPU puede
 
 **Grabar desde ahora** es una opción explícita con duración en minutos. Graba el futuro en tiempo real y por eso tarda lo mismo que el intervalo pedido. No es captura continua ni recupera el pasado. No existe un límite oculto de 5 o 50 minutos. En importaciones parciales, el corte de descarga puede aproximarse al fotograma clave para evitar recodificar la fuente entera.
 
-Las rutas YouTube/Twitch están cubiertas por pruebas controladas y captura HLS local autorizada. La descarga real en esos proveedores sigue sin validarse: esta red bloqueó YouTube y falló TLS con Twitch. No se garantiza que cualquier enlace funcione. No se usan credenciales ni cookies ni se eluden DRM, autenticación o restricciones. Comprobar enlace consulta metadatos, no garantiza la descarga.
+Las rutas YouTube/Twitch tienen pruebas controladas y captura HLS local autorizada. En 0.8.0 se verificaron metadatos/playlist y un fragmento de un VOD concreto de Twitch usando certificados del sistema. La descarga completa de ese VOD y YouTube/Live siguen sin validarse. No se garantiza que cualquier enlace funcione. No se usan credenciales ni cookies ni se eluden DRM, autenticación o restricciones. Comprobar enlace consulta metadatos, no garantiza la descarga.
 
 ## Editor
 

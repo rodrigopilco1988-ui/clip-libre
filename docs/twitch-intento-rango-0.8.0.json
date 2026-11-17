@@ -1,0 +1,9 @@
+{
+  "vod": "2926826151",
+  "requested_start": 25000,
+  "requested_end": 25005,
+  "error": "No se pudo importar el enlace: El archivo no contiene una pista de video válida.. Si requiere acceso privado, no tiene historial o el proveedor lo bloquea, usa un VOD o archivo autorizado.",
+  "seconds": 158.874,
+  "progress_events": 1,
+  "tls_verification": true
+}

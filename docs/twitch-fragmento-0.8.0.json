@@ -1,0 +1,12 @@
+{
+  "vod": "2926826151",
+  "playlist_offset_seconds": 25000,
+  "verified_media": {
+    "duration": 10.015333,
+    "width": 640,
+    "height": 360,
+    "audio": true
+  },
+  "tls_verified_for_metadata_playlist_and_fragment": true,
+  "scope": "Un fragmento después de la cuarta hora; no es una descarga completa de ocho horas."
+}

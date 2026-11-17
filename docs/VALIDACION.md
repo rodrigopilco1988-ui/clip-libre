@@ -284,3 +284,47 @@ Pruebas nuevas verifican descarga horizontal acotada, dimensiones/audio y conser
 No se probaron de nuevo inferencia en RTX física, descarga real YouTube/Twitch ni Ollama. Se mantienen sus límites anteriores. La codificación y transferencia de la primera descarga necesitan tiempo y espacio; se ejecutan sin bloquear el script de la página. El ejemplo grande se mantiene fuera del repositorio y ZIP, que incluyen únicamente las capturas e informes propios.
 
 CI final 0.7.0: **96 aprobadas en Windows (47,02 s)**; **93 aprobadas y 3 omitidas específicas de Windows en Linux (38,19 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; carga de bibliotecas NVIDIA sin errores ni ausencias. No certifica inferencia CUDA/NVENC en una GPU física. Registro ci-0.7.0.txt.
+
+## Versión 0.8.0: progreso medido y validación de duración completa
+
+Código: `6f0b71b432c7a8ddc4f6c6a99169592367d17266`.
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/44095443779
+
+Prueba local completa: **102 aprobadas y 3 omitidas específicas de Windows en 48,60 s**.
+
+### Progreso y estimaciones
+
+Progress mantiene estado protegido por bloqueo, etapa, datos medidos, reloj monotónico, tiempo total y ETA por etapa. La ETA se basa en bytes/segundos por segundo o ritmo observado; permanece desconocida al no haber datos suficientes. El tiempo transcurrido se congela al finalizar o fallar. Los trabajos activos no se descartan al conservar el historial reciente.
+
+run_observed lee el stdout/stderr en trabajadores con cola; entrega eventos antes de que termine el proceso y mantiene latidos sin inventar porcentajes. FFmpeg aporta out_time_us y speed; yt-dlp, bytes/fracciones/ETA y fragmentos cuando están disponibles. No se muestra ni persiste el info_dict de yt-dlp con URLs temporales. Los formatos/pistas cambian la medición de etapa; unión/fixup se muestran como una fase distinta. Copia local y hash de registro informan bytes. La extracción de audio mantiene el contenido binario separado del progreso. Whisper informa segundos de audio leídos, carga de modelo y procesador real.
+
+La interfaz consulta un endpoint local por token mediante un panel HTML, sin necesitar que el script principal se repinte durante la espera. Las tareas puras ejecutadas en un trabajador no llaman a Streamlit. El panel también sigue las descargas directas cuyo callback no relanza la página. Muestra claramente «restante de esta etapa», no una estimación ficticia del trabajo completo. El porcentaje se omite cuando no hay tamaño o avance observable. Los timeouts terminan el grupo de procesos propio (o el árbol con taskkill en Windows).
+
+Tests: aritmética ETA/fin congelado, eventos recibidos antes de salida del subproceso, timeout, extracción FFmpeg con progreso y muestras idénticas a la ruta anterior, endpoint tokenizado sin caché y posición real de Whisper. Se conserva la prueba de limpieza y fallback de codificación de versiones anteriores.
+
+### Ocho horas y archivos parciales
+
+No se encontró un máximo fijo de cuatro horas en los controles; la barra dependía de la duración informada/importada. Existía una ruta que reutilizaba un archivo VOD por URL/intervalo sin comprobar duración nueva. Se añade comprobación reciente de metadatos al volver a pegar el enlace (cinco minutos), comparación de duración esperada contra archivo y exclusión de importaciones marcadas incompletas. No se puede determinar retrospectivamente si esa fue la única causa en el PC del usuario, al no disponer de su archivo local.
+
+Al importar, se registra expected_duration/actual_duration y se verifica el resultado antes de anunciar análisis completo. Un archivo cuatro horas para un VOD de ocho queda marcado incompleto, se conserva y se avisa. Un proyecto parcial puede analizar su contenido disponible; la actualización del enlace no elimina el proyecto anterior. No se une automáticamente un tramo nuevo con uno anterior. La actualización puede volver a descargar todo.
+
+El botón Actualizar desde el enlace abre el enlace original y comprueba su duración. Comprobar enlace y el encabezado distinguen duración anunciada de duración del archivo local. La barra usa la duración completa y su extremo inicial ahora ocupa todo el VOD al elegir inicio/fin sin ajustes anteriores. Usar todo el intervalo disponible permite salir de una selección corta guardada. Se detiene la descarga ante fragmentos no disponibles en lugar de saltarlos silenciosamente; se ignoran configuraciones externas de yt-dlp para que no añadan límites ocultos.
+
+Tests de UI verifican máximo **29050/60 = 484,1667 minutos**, cambio a intervalo completo y conservación con aviso de una descarga simulada de 14400 frente a 29050 s. El caché rechaza explícitamente un archivo de cuatro horas cuando se esperan ocho. El selector de calidad ofrece 360/720/1080p; el máximo inicial sigue siendo 1080, y bajar resolución requiere elegirlo.
+
+El muestreo visual rápido aplica fps antes de escala para evitar escalar fotogramas que no se usarán. No se cambia el intervalo pedido ni se reduce el contenido temporal. No se midió una aceleración universal y no se promete procesar ocho horas remotas en dos minutos.
+
+### Validación real del VOD 2926826151 y sus límites
+
+1. El extractor con el almacén certifi inicial falló por cadena de certificado en esta red. Con los certificados del sistema y la verificación TLS habilitada, la extracción pública sí terminó. La app utiliza compat_opts no-certifi y su equivalente CLI; no usa nocheckcertificate, cookies ni autenticación añadida.
+2. Metadatos reales: duración **29050 s = 8:04:10**, live_status was_live, no directo activo. Formatos ofrecidos hasta 1080p60, con 360p disponible. Informe twitch-metadata-0.8.0.json.
+3. Playlist real de 360p: **2905 segmentos**, suma **29050 s**, EXT-X-ENDLIST presente. Informe twitch-playlist-0.8.0.json. Esto confirma la duración anunciada y accesible de la playlist; no prueba que todos los segmentos se hayan descargado.
+4. Se recuperó un fragmento público de la posición aproximada **25000 s (6:56:40)**, junto con su inicialización fMP4 pública. Sin claves de cifrado ni discontinuidades antes del fragmento. Al normalizar timestamps localmente, FFprobe verificó **10,015333 s, 640×360, video y audio**. Los medios de esa validación permanecen fuera del repositorio/ZIP. Informe twitch-fragmento-0.8.0.json.
+5. Un intento separado de import_url con yt-dlp/FFmpeg y download-sections para 25000–25005 s tardó **158,874 s** y produjo un contenedor sin pista de video válida; la función devolvió error. Informe twitch-intento-rango-0.8.0.json. Ese intento no se presenta como descarga correcta ni confirma la importación de rangos de este VOD.
+6. No se descargaron ni analizaron las ocho horas completas. La consulta de metadatos/playlist y el fragmento posterior a cuatro horas no se extrapolan a garantía de todo Twitch o Twitch Live. YouTube/Live y RTX/Ollama físicos mantienen sus limitaciones de validación anteriores.
+
+### Interfaz real y descarga con ETA
+
+Chromium abrió la app y comprobó el enlace real, mostró **Duración anunciada por el enlace: 8:04:10**, y permitió un fin superior a 480 minutos. Después, con el ejemplo local propio autorizado, inició una descarga editada con tres cuadros. Mientras FFmpeg codificaba, el panel mostró **1 %**, video procesado **0,6 s**, tiempo total transcurrido **0:02**, restante estimado de etapa **0:57** y aviso de que puede cambiar. El archivo se descargó correctamente; sin errores JavaScript ni excepción Streamlit. Ese tiempo restante era una estimación intermedia, no el tiempo final ni una garantía. Informes browser-0.8.0.json, capturas progreso-real-0.8.0.png y vod-ocho-horas-0.8.0.png.
+
+CI final 0.8.0: **105 aprobadas en Windows (75,19 s)**; **102 aprobadas y 3 omitidas específicas de Windows en Linux (42,12 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; carga de bibliotecas NVIDIA sin errores ni ausencias. No equivale a inferencia CUDA/NVENC en GPU física. Registro ci-0.8.0.txt.
