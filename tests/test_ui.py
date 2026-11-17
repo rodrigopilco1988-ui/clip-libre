@@ -238,3 +238,15 @@ def test_duplicate_titles_keep_selected_clip_for_deferred_subtitles(video,tmp_pa
     assert not app.exception and not app.error
     assert next(x for x in app.selectbox if x.label=='Clip').value==wanted
     assert next(c for c in store.candidates(sid) if c['id']==wanted)['edited_words'][0]['text']=='Prueba'
+
+
+def test_capcut_subtitles_start_disabled_even_for_old_saved_settings(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'capcut'))
+    store=Store(tmp_path/'capcut');sid=store.register(video)
+    store.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),[dict(start=1.,end=4.,score=60,title='Prueba',reason='Prueba',classification='test',visual_samples=0,words=[],edit_settings=dict(burn=True))])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(b for b in app.button if b.label=='Elegir y editar').click().run(timeout=30)
+    assert not app.exception and not app.error
+    assert not next(c for c in app.checkbox if c.label=='Mostrar subtítulos').value
+    assert any('Subtítulos opcionales' in e.label for e in app.expander)

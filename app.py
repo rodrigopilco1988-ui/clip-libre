@@ -179,7 +179,8 @@ def sync_clip_timeline(key,cid):
 
 
 def count_layout_changed(cid):
-    n=st.session_state['panel_count_'+cid]
+    n=st.session_state.get('panel_count_'+cid) or 1
+    st.session_state['panel_count_'+cid]=n
     if n==2 and st.session_state['layout_'+cid]=='Foto + clip': return
     st.session_state['layout_'+cid]={1:'Vertical',2:'Dúo',3:'Tres cuadros'}[n]
 
@@ -419,6 +420,10 @@ if sid:
                     st.write(item['reason'])
                     if st.button('Ver clip',key='view_button_'+item['id']): st.session_state['view_open_'+item['id']]=True
                     if tabs[1].open and st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
+                    from cliplivre.downloads import source_clip
+                    def download_horizontal(path=source['path'],begin=item['start'],finish=item['end'],root=ROOT):
+                        return source_clip(path,begin,finish,root).read_bytes()
+                    st.download_button('Descargar clip para CapCut · horizontal',data=download_horizontal,file_name=f"clip_{item['id'][:8]}_horizontal.mp4",mime='video/mp4',key='download_source_'+item['id'],on_click='ignore',width='stretch')
                     st.button('Elegir y editar',key='edit_'+item['id'],on_click=choose_clip,args=(sid,item['id']))
                     a,b=st.columns(2)
                     if a.button('Aceptar',key='accept'+item['id']): store.update(item['id'],state='aceptado'); st.rerun()
@@ -439,15 +444,20 @@ if sid:
             eligible=[c for c in candidates if c['state']!='descartado']
             if eligible:
                 clip_labels={c['id']:f"Clip {i+1} · {clock(c['end']-c['start'])} · {c['title']}" for i,c in enumerate(eligible)}
-                cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=clip_labels.__getitem__,key='editor_clip_'+sid)
+                editor_key='editor_clip_'+sid
+                if st.session_state.get(editor_key) not in clip_labels: st.session_state[editor_key]=eligible[0]['id']
+                cid=st.selectbox('Clip',options=[c['id'] for c in eligible],index=None,format_func=clip_labels.__getitem__,key=editor_key)
                 item=next(c for c in eligible if c['id']==cid); saved=item.get('edit_settings',{})
                 with st.container(border=True):
                     st.caption('POSICIÓN DEL RECORTE')
                     preset_options=['Vertical','Dúo','Tres cuadros','Foto + clip']
-                    layout=st.radio('Diseño',preset_options,index=preset_options.index(item.get('layout','Vertical')),horizontal=True,key='layout_'+cid,on_change=set_layout,args=(cid,))
+                    layout_key='layout_'+cid
+                    if layout_key not in st.session_state: st.session_state[layout_key]=item.get('layout','Vertical')
+                    layout=st.radio('Diseño',preset_options,index=None,horizontal=True,key=layout_key,on_change=set_layout,args=(cid,))
                     a,b,c=st.columns([2,1,1]); count_key='panel_count_'+cid
                     expected_count={'Vertical':1,'Dúo':2,'Tres cuadros':3,'Foto + clip':2}[layout]
-                    n=a.selectbox('Número de cuadros',[1,2,3],index=expected_count-1,key=count_key,on_change=count_layout_changed,args=(cid,))
+                    if count_key not in st.session_state: st.session_state[count_key]=expected_count
+                    n=a.selectbox('Número de cuadros',[1,2,3],index=None,key=count_key,on_change=count_layout_changed,args=(cid,))
                     b.button('Añadir cuadro',disabled=n==3,on_click=change_panel_count,args=(cid,1),key='add_'+cid)
                     c.button('Quitar último cuadro',disabled=n==1,on_click=change_panel_count,args=(cid,-1),key='remove_'+cid)
                     aspect=st.selectbox('Formato',['9:16','1:1','16:9'],index=['9:16','1:1','16:9'].index(saved.get('aspect','9:16')))
@@ -523,10 +533,9 @@ if sid:
                     if logo_path:
                         st.image(logo_path,width=80)
                         st.button('Quitar logo',on_click=clear_logo,args=(cid,),key='clear_logo_'+cid)
-                with st.container(border=True):
-                    st.caption('SUBTÍTULOS AUTOMÁTICOS')
+                with st.expander('Subtítulos opcionales · puedes hacerlos en CapCut',expanded=False):
                     if st.session_state.pop('pending_burn_'+cid,False): st.session_state['burn_'+cid]=True
-                    burn=st.checkbox('Mostrar subtítulos',value=saved.get('burn',True),key='burn_'+cid)
+                    burn=st.checkbox('Mostrar subtítulos',value=False,key='burn_'+cid)
                     if st.button('Generar / actualizar subtítulos',key='generate_subs_'+cid):
                         try:
                             if not words:
@@ -573,15 +582,19 @@ if sid:
                     reduce=st.checkbox('Reducir silencios (revisar contexto)',value=False)
                 with crop_area:
                     from cliplivre.render import dimensions
-                    source_image=cached_frame(source['path'],min(start+.2,end-.01),Path(source['path']).stat().st_mtime_ns)
+                    from cliplivre.media import clip_preview
+                    preview_end=min(end,start+120)
+                    editor_preview=clip_preview(source['path'],start,preview_end,ROOT/'vistas_previas')
+                    source_image=cached_frame(str(editor_preview),max(0,min(.2,preview_end-start-.01)),editor_preview.stat().st_mtime_ns)
                     def image_data(path): return 'data:image/png;base64,'+base64.b64encode(Path(path).read_bytes()).decode() if path and Path(path).is_file() else None
                     revision_key='crop_revision_'+composition_key
-                    crop=crop_editor(source_image,panels,aspect,video_url=media_server().url(source['path']),start=start,end=end,words=words,burn=burn,subtitle_color=sub_color,subtitle_size=sub_size,subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],revision=st.session_state.get(revision_key,0),photo=image_data(photo_path) if layout=='Foto + clip' else None,logo=image_data(logo_path),titles=titles,key='crop_'+composition_key)
-                    if crop and crop.get('revision',0)>st.session_state.get(revision_key,0):
+                    crop=crop_editor(source_image,panels,aspect,video_url=media_server().url(editor_preview),start=0,end=preview_end-start,time_origin=start,configuration=composition_key,words=words,burn=burn,subtitle_color=sub_color,subtitle_size=sub_size,subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],revision=st.session_state.get(revision_key,0),photo=image_data(photo_path) if layout=='Foto + clip' else None,logo=image_data(logo_path),titles=titles,key='crop_'+cid)
+                    if crop and crop.get('configuration')==composition_key and crop.get('revision',0)>st.session_state.get(revision_key,0):
                         new_panels=crop.get('panels',[])
                         if len(new_panels)==n:
                             for panel in new_panels: validate_panel(panel)
                             panels=new_panels; st.session_state[composition_key]=panels; st.session_state[revision_key]=crop['revision']
+                    if preview_end<end: st.caption('Vista previa de los primeros 2 minutos. La descarga conserva todo el intervalo elegido.')
                     st.caption('Vista interactiva inmediata. Para comprobar cortes, animación y el resultado exacto, usa Vista previa editada.')
                 export_speed=st.selectbox('Velocidad de exportación',['Rápida','Equilibrada','Mayor compresión'],index=['ultrafast','veryfast','medium'].index(saved.get('preset','ultrafast')) if saved.get('preset','ultrafast') in ['ultrafast','veryfast','medium'] else 0)
                 st.caption('Rápida reduce la espera y genera archivos más grandes. No cambia la resolución elegida.')
@@ -617,7 +630,17 @@ if sid:
                         st.session_state['preview'+cid]=str(result)
                     except Exception as e: st.error(str(e))
                 if st.session_state.get('preview'+cid): direct_player(st.session_state['preview'+cid])
-                if st.button('Exportar clip con estos ajustes',type='primary',disabled=missing_photo,width='stretch'):
+                from cliplivre.downloads import edited_clip
+                download_settings=asdict(replace(edit,burn=False))
+                download_cuts=silent_intervals(audio_context,start,end) if reduce else []
+                def download_edit(path=source['path'],begin=start,finish=end,root=ROOT,settings=json.dumps(download_settings),cuts=json.dumps(download_cuts),candidate_id=cid):
+                    selected=json.loads(settings)
+                    output=edited_clip(path,begin,finish,root,selected,[],json.loads(cuts))
+                    Store(root).export(candidate_id,output,selected)
+                    return output.read_bytes()
+                st.download_button('Descargar MP4 editado · sin subtítulos',data=download_edit,file_name=f'clip_{cid[:8]}_editado.mp4',mime='video/mp4',key='download_edit_'+cid,on_click='ignore',type='primary',disabled=missing_photo,width='stretch')
+                st.caption('Descarga directa para CapCut. Se prepara al pulsar; conserva audio, cuadros, textos y logo. Sin subtítulos.')
+                if st.button('Exportar clip con estos ajustes',disabled=missing_photo,width='stretch'):
                     try:
                         with st.spinner('Exportando…'): result=make(dict(item,start=start,end=end,edited_words=list(edited)),edit)
                         store.export(cid,result,asdict(edit)); st.session_state['export'+cid]=str(result)
