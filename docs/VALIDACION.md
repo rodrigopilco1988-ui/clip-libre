@@ -190,3 +190,35 @@ AppTest verifica las transiciones sin acceso a red. Chromium real comprueba el h
 Esta validación no descarga ni graba Twitch real, no garantiza que exista un VOD público y no añade recuperación histórica de un canal activo. No altera las restricciones de acceso ni la duración elegida por el usuario.
 
 CI final 0.4.1: **79 aprobadas en Windows (38,54 s)**; **76 aprobadas y 3 omitidas en Linux (29,26 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; DLL NVIDIA cargadas sin errores ni bibliotecas ausentes. Sin inferencia en una GPU física. Registro `ci-0.4.1.txt`.
+
+## Versión 0.5.0: análisis por lotes y exportación rápida
+
+Código final: `92cc0642c83a084545ffc32858129f002b393f46`.
+CI final: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/44016541366
+
+Implementación:
+
+- El perfil Rápido usa BatchedInferencePipeline con Tiny: lote 4 CPU / 8 CUDA y beam 1, manteniendo marcas por palabra. Equilibrado/Calidad conservan la ruta secuencial. Los resultados pueden variar; no se certifica una equivalencia de precisión semántica. Las transcripciones válidas previas siguen siendo reutilizables. Fallos CUDA, incluidos errores durante iteración, descartan el parcial y liberan GPU antes de continuar en CPU.
+- Codificador automático con prueba FFmpeg real NVENC de un fotograma. No se infiere disponibilidad a partir de CUDA ni de la lista de codificadores compilados. Ante error de codificación NVENC del clip se elimina el parcial y se reintenta con libx264. Se registra encoder_used en edicion.json. Esto acelera codificación cuando está disponible; no mueve los filtros a GPU.
+- Velocidad de exportación visible: Rápida (ultrafast CPU / p1 NVENC) inicial para nuevos clips, Equilibrada o Mayor compresión. Conserva preferencias guardadas y resolución; Rápida puede producir archivos considerablemente mayores.
+- Un solo cuadro que ocupa el lienzo se recorta y escala directamente, sin construir un canvas y superposición redundantes. Varios cuadros, foto, logo y títulos conservan su ruta.
+- Seguimiento facial opcional con zona muerta de 0,035 del ancho y desplazamiento limitado a 0,025 por segundo, con límite de avance tras pérdidas de detección. Reduce temblor, a costa de seguir más lentamente. No estabiliza el movimiento presente en el video original ni identifica al hablante. El encuadre normal sigue fijo y el zoom desactivado inicialmente.
+
+Prueba local final completa: **83 aprobadas + 3 omitidas específicas de Windows en 35,44 s**. Se incluye fallback NVENC con exportación CPU real, tiempos por palabra en lotes, fallo perezoso CUDA y descarga del modelo antes de CPU, trayectoria facial acotada y reimportación de VOD sin consultas de red. La CI ejecuta el conjunto final completo.
+
+### Mediciones reales CPU
+
+Fuentes autorizadas propias: examples/autorizado.mp4, patrón visual y voz sintética CC0. Para el análisis se repitió por copia de paquetes hasta 600,03 s. Pesos Tiny previamente descargados, idioma inglés, sin descarga de fuente, sin otros ensayos concurrentes. No equivalen a streams reales.
+
+Análisis alternado secuencial/lotes/secuencial/lotes: 18,970 / 14,512 / 17,104 / 15,118 s. Medianas **18,037 → 14,815 s**, reducción aproximada del 18 %. Todas las propuestas respetaron 30–90 s, con distintos largos; los candidatos pueden diferir al cambiar la transcripción. RSS muestreada al terminar cada análisis entre 218,0 y 362,9 MB; no es máximo del sistema ni incluye todos los procesos hijos. Última ejecución exportó un candidato de 49,59 s a MP4 1080×1920, audio y subtítulos, en **9,222 s**. Repetición del mismo análisis: cero bloques nuevos. Informe `analysis-benchmark-0.5.0.json`.
+
+Exportación de 15 s, un cuadro vertical 1080×1920, CPU: tres alternancias con el renderer anterior/veryfast y nuevo/ultrafast. Medianas **8,6493 → 2,4946 s**, aproximadamente 3,47 veces más rápido. Tamaños: unos **2,96 → 8,44 MB**. La comparación combina optimización de composición y cambio de compresión; no atribuye toda la mejora a una sola de ellas ni afirma misma eficiencia de compresión. Informe `render-benchmark-0.5.0.json`.
+
+No se dispone de RTX 3060 física: la ruta NVENC real solo se probó como no disponible en este equipo; éxito y fallo tardío se cubren controladamente. Los lotes CUDA se verifican con dobles, incluida limpieza antes del fallback. No se garantiza terminar un directo de duración arbitraria en dos o tres minutos: la descarga, duración, calidad, GPU y efectos determinan el tiempo. Las limitaciones remotas YouTube/Twitch y de inferencia Ollama se mantienen.
+
+
+La reimportación de un VOD disponible en disco comprueba caché antes de consultar metadatos. AppTest sustituye consulta y descarga por fallos explícitos y comprueba que Generar clips reutilice el proyecto sin llamar ninguna. El descriptor inmutable sigue excluyendo grabaciones en vivo y separa archivo completo de intervalos. Descargas nuevas solicitan cuatro fragmentos concurrentes cuando el protocolo/proveedor lo permite, sin reducir resolución ni el intervalo pedido. El comando se verifica controladamente; no se midió su efecto en YouTube/Twitch real. El estado de la UI distingue comprobación, descarga y análisis.
+
+Chromium real abrió un candidato ya analizado, verificó Rápida inicialmente y exportó con los controles de la app. Archivo real, preset ultrafast, encuadre paneles con zoom 1, codificador efectivo libx264, sin excepción Streamlit ni errores JS registrados. Tiempo observado 9,751 s desde el clic hasta registrar la exportación. Captura exportacion-0.5.0.png e informe browser-0.5.0.json. No es tiempo de análisis ni de descarga.
+
+CI final: **86 aprobadas en Windows (29,06 s)**; **83 aprobadas y 3 omitidas en Linux (33,22 s)**. Instalar.bat, RepararGPU.bat y pip check terminaron correctamente; carga de DLL NVIDIA sin errores ni bibliotecas ausentes. Esto no demuestra inferencia CUDA ni NVENC en GPU física. Registro ci-0.5.0.txt.

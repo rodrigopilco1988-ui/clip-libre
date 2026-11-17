@@ -4,6 +4,7 @@ Estudio local para generar, revisar y editar clips. Interfaz original en españo
 
 ## Rendimiento en 0.5.0
 
+- Al reutilizar un VOD ya descargado no se consulta la plataforma. Las descargas nuevas solicitan cuatro fragmentos simultáneos si el proveedor/protocolo lo permite; sin medición remota de rendimiento todavía. El estado indica cuándo se descarga y cuándo se analiza.
 - **Generar clips → Rápido** usa Tiny con transcripción por lotes: 4 en CPU y 8 en CUDA. Conserva marcas por palabra; los resultados pueden diferir ligeramente del modo secuencial. Se mantienen Small/Medium y los ajustes avanzados.
 - **Velocidad de exportación → Rápida** está visible en el editor y es la opción inicial para clips nuevos. Usa menor compresión para reducir espera: archivos más grandes, misma resolución. Puedes elegir Equilibrada o Mayor compresión; se respetan los ajustes guardados.
 - **Codificador automático** prueba una codificación NVENC real, no solo la presencia de una tarjeta. Usa NVIDIA si pasa; si falla durante el clip, elimina el parcial y reintenta en CPU. CUDA/Whisper y NVENC son rutas independientes: que una funcione no demuestra que la otra funcione. Los filtros siguen en CPU.
