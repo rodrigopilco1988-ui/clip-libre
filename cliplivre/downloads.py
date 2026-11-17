@@ -18,7 +18,7 @@ def _identity(path):
     return str(source),stat.st_size,stat.st_mtime_ns
 
 
-def source_clip(path,start,end,root):
+def source_clip(path,start,end,root,progress=None):
     if not 0<=start<end: raise ValueError('Intervalo de descarga inválido.')
     identity=_identity(path)
     key=hashlib.sha256(json.dumps([identity,start,end,'source-v1']).encode()).hexdigest()
@@ -32,11 +32,17 @@ def source_clip(path,start,end,root):
         encoder=choose_encoder('auto')
         ending=['-pix_fmt','yuv420p','-movflags','+faststart',str(temp)]
         try:
-            try: run(cmd+encoder_options(encoder,'ultrafast')+ending)
+            def encode(options):
+                command=cmd+options+ending
+                if progress:
+                    from .observed import run_observed
+                    return run_observed(command[:-1]+['-progress','pipe:1','-nostats',command[-1]],progress,duration=end-start,stage='Preparando MP4 horizontal')
+                return run(command)
+            try: encode(encoder_options(encoder,'ultrafast'))
             except Exception:
                 if encoder!='h264_nvenc': raise
                 temp.unlink(missing_ok=True)
-                run(cmd+encoder_options('libx264','ultrafast')+ending)
+                encode(encoder_options('libx264','ultrafast'))
             temp.replace(output)
         except Exception as e:
             raise RuntimeError('No se pudo preparar el MP4 del clip. El original se conserva. '+str(e)) from e
@@ -44,7 +50,7 @@ def source_clip(path,start,end,root):
     return output
 
 
-def edited_clip(path,start,end,root,settings,words=(),cuts=()):
+def edited_clip(path,start,end,root,settings,words=(),cuts=(),progress=None):
     from .render import render,Edit
     key=hashlib.sha256(json.dumps([_identity(path),start,end,settings,words,cuts],sort_keys=True).encode()).hexdigest()
     folder=Path(root)/'descargas';folder.mkdir(parents=True,exist_ok=True)
@@ -53,7 +59,7 @@ def edited_clip(path,start,end,root,settings,words=(),cuts=()):
         if manifest.exists():
             result=Path(json.loads(manifest.read_text())['path'])
             if result.is_file(): return result
-        result=render(path,start,end,words,Path(root)/'editados',Edit(**settings),cuts)
+        result=render(path,start,end,words,Path(root)/'editados',Edit(**settings),cuts,process_progress=progress)
         temp=manifest.with_suffix('.'+uuid.uuid4().hex+'.tmp')
         temp.write_text(json.dumps(dict(path=str(result))))
         temp.replace(manifest)

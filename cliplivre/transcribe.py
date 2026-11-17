@@ -1,17 +1,20 @@
 import gc
+import time
 
 MODELS = ['tiny','base','small','medium']
 _CUDA_FAILURE = None
 
 
-def _once(samples, model, device, language,notify=lambda message:None,fast=False):
+def _once(samples, model, device, language,notify=lambda message:None,fast=False,process_progress=None):
     from .gpu_runtime import prepare_libraries
     if device=='cuda': prepare_libraries()
     from faster_whisper import WhisperModel
     engine = None
     segments = None
     try:
+        if process_progress:process_progress(dict(stage='Cargando Whisper en '+device.upper(),message='La primera carga puede descargar el modelo local.'))
         engine = WhisperModel(model, device=device, compute_type='int8_float16' if device=='cuda' else 'int8')
+        decode_started=time.monotonic()
         batch_size=(8 if device=='cuda' else 4) if fast else 1
         if fast:
             from faster_whisper import BatchedInferencePipeline
@@ -26,6 +29,7 @@ def _once(samples, model, device, language,notify=lambda message:None,fast=False
             if float(s.end)-reported>=10:
                 notify(f'Transcripción en {device.upper()}: {float(s.end)/60:.1f} min leídos del bloque')
                 reported=float(s.end)
+            if process_progress:process_progress(dict(stage='Transcribiendo bloque',done=float(s.end),total=len(samples)/16000,origin=decode_started,message='Transcripción en '+device.upper()))
             result.append(dict(start=float(s.start),end=float(s.end),text=s.text.strip(),
                 words=[dict(start=float(w.start),end=float(w.end),text=w.word.strip()) for w in (s.words or [])]))
         return result, dict(device=device,language=info.language,batched=fast,batch_size=batch_size)
@@ -47,7 +51,7 @@ def _once(samples, model, device, language,notify=lambda message:None,fast=False
         gc.collect()
 
 
-def transcribe(samples, model='small', device='auto', language=None, progress=lambda message:None,fast=False):
+def transcribe(samples, model='small', device='auto', language=None, progress=lambda message:None,fast=False,process_progress=None):
     global _CUDA_FAILURE
     if model not in MODELS:
         raise ValueError('Modelo Whisper no permitido.')
@@ -70,7 +74,7 @@ def transcribe(samples, model='small', device='auto', language=None, progress=la
     if use_cuda:
         progress('Transcribiendo con la GPU…')
         try:
-            result,metadata=_once(samples,model,'cuda',language,progress,fast)
+            result,metadata=_once(samples,model,'cuda',language,progress,fast,process_progress)
             metadata['requested_device']=device
             return result,metadata
         except Exception as e:
@@ -79,7 +83,7 @@ def transcribe(samples, model='small', device='auto', language=None, progress=la
             # _once ya cerró el generador y liberó el modelo antes del reintento.
     progress(warning or 'Transcribiendo en CPU…')
     try:
-        result,metadata=_once(samples,model,'cpu',language,progress,fast)
+        result,metadata=_once(samples,model,'cpu',language,progress,fast,process_progress)
     except Exception as e:
         detail=f' GPU: {_CUDA_FAILURE}.' if warning else ''
         raise RuntimeError(f'No se pudo transcribir en CPU: {e}.{detail} El bloque no se guardó como terminado; puedes reintentarlo.') from e

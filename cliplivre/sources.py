@@ -24,7 +24,7 @@ def audio_to_video(path,output):
     return Path(output)
 
 
-def import_local(path,root,permission=False):
+def import_local(path,root,permission=False,progress=None):
     if not permission: raise ValueError('Confirma que tienes permiso para procesar y reutilizar este material.')
     path=Path(str(path).strip().strip('"')).resolve()
     if path.suffix.lower() not in EXTENSIONS: raise ValueError('Formato no admitido. Usa un video o un podcast MP3, WAV, M4A, AAC, OGG, FLAC u OPUS.')
@@ -33,7 +33,14 @@ def import_local(path,root,permission=False):
     target=Path(root)/'originales'/uuid.uuid4().hex
     target.mkdir(parents=True)
     dest=target/path.name
-    shutil.copy2(path,dest)
+    if progress:
+        total=path.stat().st_size;done=0
+        progress(dict(stage='Copiando archivo autorizado',done=0,total=total))
+        with path.open('rb') as source,dest.open('wb') as output:
+            for block in iter(lambda:source.read(8*1024*1024),b''):
+                output.write(block);done+=len(block);progress(dict(done=done,total=total))
+        shutil.copystat(path,dest)
+    else:shutil.copy2(path,dest)
     if path.suffix.lower() in AUDIO_EXTENSIONS:
         return audio_to_video(dest,target/'podcast_visual.mp4')
     return dest
@@ -87,7 +94,7 @@ def extract_info(url):
     try:
         runtime=local_deno()
         with YoutubeDL({'js_runtimes':{'deno':{'path':runtime}} if runtime else {},'quiet':True,'no_warnings':True,'noplaylist':True,'skip_download':True,
-                        'socket_timeout':20,'retries':1}) as y:
+                        'socket_timeout':20,'retries':1,'compat_opts':{'no-certifi'}}) as y:
             info=y.extract_info(validate_url(url),download=False)
     except Exception as e:
         raise ValueError(source_message(e)) from e
@@ -113,7 +120,7 @@ def inspect_url(url):
                 license=info.get('license') or 'Comprueba tu permiso de reutilización')
 
 
-def capture_live(info,folder,seconds):
+def capture_live(info,folder,seconds,progress=None):
     streams=info.get('requested_formats') or [info]
     if len(streams)>2 or any(not s.get('url') for s in streams):
         raise ValueError('El proveedor no entregó un flujo capturable. Usa un VOD o un archivo autorizado.')
@@ -125,14 +132,18 @@ def capture_live(info,folder,seconds):
     else: cmd+=['-map','0:v:0','-map','0:a:0?']
     output=folder/'directo.mkv'
     cmd+=['-t',seconds,'-c','copy','-avoid_negative_ts','make_zero',output]
-    run(cmd,timeout=max(180,int(seconds*3)))
+    if progress:
+        from .observed import run_observed
+        run_observed(cmd[:-1]+['-progress','pipe:1','-nostats',cmd[-1]],progress,duration=seconds,timeout=max(180,int(seconds*3)),stage='Grabando desde ahora')
+    else:run(cmd,timeout=max(180,int(seconds*3)))
     probe(output)
     return output
 
 
-def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible'):
+def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible',progress=None,height=1080):
     if not permission: raise ValueError('Debes confirmar el permiso de acceso y reutilización.')
     url=validate_url(url)
+    if height not in {360,720,1080}: raise ValueError('Calidad de descarga inválida.')
     if not math.isfinite(start) or start<0 or (end is not None and (not math.isfinite(end) or end<=start)):
         raise ValueError('El fin debe ser posterior al inicio. Puedes elegir cualquier intervalo disponible del stream.')
     try:
@@ -155,10 +166,10 @@ def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible'
             end=float(duration)
         folder=Path(root)/'originales'/uuid.uuid4().hex; folder.mkdir(parents=True)
         if live and live_mode=='actual':
-            return capture_live(info,folder,end-start)
+            return capture_live(info,folder,end-start,progress=progress) if progress else capture_live(info,folder,end-start)
         import sys
-        cmd=[sys.executable,'-m','yt_dlp','--no-playlist','--no-progress','--concurrent-fragments','4','--socket-timeout','20','--retries','1',
-             '-f','bv*[height<=1080]+ba/b[height<=1080]',
+        cmd=[sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--no-progress','--concurrent-fragments','4','--socket-timeout','20','--retries','1',
+             '--compat-options','no-certifi','--abort-on-unavailable-fragments','--fragment-retries','2','-f',f'bv*[height<={height}]+ba/b[height<={height}]',
              '--merge-output-format','mkv','-o',str(folder/'fuente.%(ext)s')]
         runtime=local_deno()
         if runtime: cmd+=['--js-runtimes','deno:'+runtime]
@@ -167,9 +178,23 @@ def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible'
         if live: cmd+=['--live-from-start']
         cmd+=[url]
         duration=(end-start) if end is not None else (info.get('duration') or 1800)
-        run(cmd,timeout=min(21600,max(180,int(duration*4+120))))
+        timeout=min(21600,max(180,int(duration*4+120)))
+        if progress:
+            from .observed import run_observed
+            cmd.remove('--no-progress')
+            cmd+=['--progress','--newline','--no-colors','--progress-delta','0.5','--progress-template','download:CLIP_PROGRESS %(progress)j']
+            run_observed(cmd,progress,timeout=timeout,stage='Descargando fuente')
+        else:run(cmd,timeout=timeout)
         files=[p for p in folder.iterdir() if p.suffix.lower() in VIDEO_EXTENSIONS]
         if not files: raise ValueError('No se obtuvo un video reproducible.')
-        probe(files[0]); return files[0]
+        actual=probe(files[0])['duration']
+        expected=(end-start) if end is not None else info.get('duration')
+        import json
+        (folder/'importacion.json').write_text(json.dumps(dict(expected_duration=expected,actual_duration=actual,complete=not incomplete_duration(expected,actual),checked_at=time.time(),url=url,height=height)),encoding='utf-8')
+        return files[0]
     except Exception as e:
         raise RuntimeError(f'No se pudo importar el enlace: {e}. Si requiere acceso privado, no tiene historial o el proveedor lo bloquea, usa un VOD o archivo autorizado.') from e
+
+
+def incomplete_duration(expected,actual):
+    return bool(expected and actual+max(3,float(expected)*.001)<float(expected))

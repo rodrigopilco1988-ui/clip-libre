@@ -202,11 +202,11 @@ def test_reused_vod_generates_without_network_metadata(video,tmp_path,monkeypatc
     monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'cached-vod-ui'))
     store=Store(tmp_path/'cached-vod-ui');sid=store.register(video)
     url='https://www.twitch.tv/videos/123'
-    store.save_settings(sid,{'import':dict(url=url,start=0,end=None,mode='Todo lo disponible',live=False)})
+    store.save_settings(sid,{'import':dict(url=url,start=0,end=None,mode='Todo lo disponible',live=False,expected_duration=8,checked_at=__import__('time').time(),height=1080)})
     def no_network(*a,**kw): raise AssertionError('Un VOD ya descargado no necesita consultar ni descargar de nuevo')
     monkeypatch.setattr(sources,'inspect_url',no_network);monkeypatch.setattr(sources,'import_url',no_network)
     calls=[]
-    def analysis(store,source,config,progress):
+    def analysis(store,source,config,progress,**kwargs):
         calls.append(source);return dict(warnings=[])
     monkeypatch.setattr(pipeline,'analyze',analysis)
     app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
@@ -250,3 +250,37 @@ def test_capcut_subtitles_start_disabled_even_for_old_saved_settings(video,tmp_p
     assert not app.exception and not app.error
     assert not next(c for c in app.checkbox if c.label=='Mostrar subtítulos').value
     assert any('Subtítulos opcionales' in e.label for e in app.expander)
+
+
+def test_checked_eight_hour_vod_has_full_range_not_four_hours(tmp_path,monkeypatch):
+    from cliplivre import sources
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'eight-hour-ui'))
+    monkeypatch.setattr(sources,'inspect_url',lambda url:dict(title='VOD autorizado de ocho horas',duration=29050,live=False))
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(x for x in app.text_input if x.label=='Enlace de YouTube o Twitch').set_value('https://www.twitch.tv/videos/2926826151').run()
+    next(b for b in app.button if b.label=='Comprobar enlace').click().run(timeout=30)
+    next(x for x in app.radio if x.label=='Captura').set_value('Elegir inicio y fin').run()
+    slider=next(x for x in app.slider if x.label=='Barra del tramo (min)')
+    assert slider.proto.max>480
+    assert next(x for x in app.number_input if x.label=='Fin del stream (min)').value>480
+    next(b for b in app.button if b.label=='Usar todo el intervalo disponible').click().run()
+    assert not app.exception and not app.error
+    assert next(x for x in app.radio if x.label=='Captura').value=='Todo lo disponible'
+
+
+def test_partial_download_is_preserved_but_not_presented_as_complete(video,tmp_path,monkeypatch):
+    from cliplivre import sources,media,pipeline
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'partial-download-ui'))
+    monkeypatch.setattr(sources,'inspect_url',lambda url:dict(title='VOD autorizado',duration=29050,live=False))
+    monkeypatch.setattr(sources,'import_url',lambda *a,**kw:video)
+    monkeypatch.setattr(media,'probe',lambda path:dict(duration=14400.,width=320,height=180,audio=True))
+    monkeypatch.setattr(pipeline,'analyze',lambda *a,**kw: (_ for _ in ()).throw(AssertionError('No debe anunciar un análisis completo de un archivo parcial')))
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(x for x in app.text_input if x.label=='Enlace de YouTube o Twitch').set_value('https://www.twitch.tv/videos/2926826151').run()
+    next(c for c in app.checkbox if c.label.startswith('Tengo acceso permitido')).check().run()
+    next(b for b in app.button if b.label=='Generar clips').click().run(timeout=30)
+    assert not app.exception and any('Importación incompleta' in e.value and '8:04:10' in e.value for e in app.error)
+    store=Store(tmp_path/'partial-download-ui');assert len(store.sources())==1
+    assert store.settings(store.sources()[0]['id'])['import']['complete'] is False
+    assert any('Actualizar desde el enlace' in b.label for b in app.button)

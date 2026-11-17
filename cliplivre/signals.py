@@ -67,7 +67,7 @@ def fast_visual_features(path,start,end,step=6.):
     frame_bytes=320*180*3
     result=[]; previous=None
     cmd=['ffmpeg','-v','error','-threads','2','-skip_frame','nokey','-ss',str(start),'-i',str(path),
-         '-t',str(end-start),'-vf',f'scale=320:180,fps=1/{step}', '-an','-pix_fmt','bgr24','-f','rawvideo','pipe:1']
+         '-t',str(end-start),'-vf',f'fps=1/{step},scale=320:180', '-an','-pix_fmt','bgr24','-f','rawvideo','pipe:1']
     with tempfile.TemporaryFile() as errors:
         process=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=errors)
         try:

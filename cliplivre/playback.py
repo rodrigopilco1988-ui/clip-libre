@@ -9,14 +9,23 @@ import secrets
 
 class MediaServer:
     def __init__(self):
-        self.paths={}; self.keys={}; self.lock=Lock()
+        self.paths={}; self.keys={}; self.progress_callbacks={}; self.lock=Lock()
         owner=self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*args): pass
             def do_HEAD(self): self.send_media(False)
             def do_GET(self): self.send_media(True)
             def send_media(self,body):
-                token=self.path.split('?',1)[0].removeprefix('/media/')
+                route=self.path.split('?',1)[0]
+                if route.startswith('/progress/'):
+                    import json
+                    with owner.lock: callback=owner.progress_callbacks.get(route.removeprefix('/progress/'))
+                    if callback is None:self.send_error(404);return
+                    data=json.dumps(callback(),ensure_ascii=False).encode('utf-8')
+                    self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(data)));self.send_header('Cache-Control','no-store');self.send_header('Access-Control-Allow-Origin','*');self.end_headers()
+                    if body:self.wfile.write(data)
+                    return
+                token=route.removeprefix('/media/')
                 with owner.lock: path=owner.paths.get(token)
                 if path is None or not path.is_file(): self.send_error(404); return
                 size=path.stat().st_size; start,end=0,size-1
@@ -58,6 +67,10 @@ class MediaServer:
                 token=secrets.token_urlsafe(24); self.keys[key]=token; self.paths[token]=path
             token=self.keys[key]
         return f'http://127.0.0.1:{self.server.server_port}/media/{token}'
+    def progress_url(self,callback):
+        token=secrets.token_urlsafe(24)
+        with self.lock:self.progress_callbacks[token]=callback
+        return f'http://127.0.0.1:{self.server.server_port}/progress/{token}'
     def close(self): self.server.shutdown(); self.server.server_close(); self.thread.join(timeout=3)
 
 @lru_cache(maxsize=1)
@@ -100,4 +113,14 @@ video.onclick=()=>button.click();seek.oninput=()=>{video.currentTime=begin+Math.
 document.querySelector('#mute').onclick=()=>{video.muted=!video.muted;document.querySelector('#mute').textContent=video.muted?'Audio: no':'Audio: sí'};
 video.addEventListener('error',()=>{time.textContent='Formato no reproducible: usa Reproducción compatible debajo.'});
 video.src='''+json.dumps(url)+''';
+</script>'''
+
+
+def progress_html(url):
+    import json
+    return '''<style>body{margin:0;background:#101726;color:#e5ebfa;font:14px Arial}.box{padding:12px;border:1px solid #34435c;border-radius:10px}h4{margin:0 0 8px}.track{height:9px;background:#27344b;border-radius:5px;overflow:hidden;margin:10px 0}.fill{height:100%;background:#3e78ff;transition:width .3s}.unknown{width:30%!important;animation:move 1.4s infinite alternate}@keyframes move{to{transform:translateX(230%)}}#details{font-size:12px;color:#b6c3d8;margin-top:7px}#times{font-size:13px}</style><div class="box"><h4 id="stage">Estado del procesamiento</h4><div id="message">Inicia una tarea para ver su progreso.</div><div class="track"><div id="fill" class="fill" style="width:0"></div></div><div id="times">Transcurrido: 0:00 · Estimación: pendiente</div><div id="details">El porcentaje y el tiempo restante corresponden a la etapa actual.</div></div><script>
+const url='''+json.dumps(url)+''';
+const clock=t=>{t=Math.max(0,Math.round(t));let h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0')};
+async function update(){try{const jobs=await(await fetch(url,{cache:'no-store'})).json();if(!jobs.length)return;const job=[...jobs].reverse().find(j=>j.status==='procesando')||jobs[jobs.length-1];document.querySelector('#stage').textContent=job.stage;document.querySelector('#message').textContent=job.message||job.status;const fill=document.querySelector('#fill');fill.className='fill'+(job.fraction===null&&job.status==='procesando'?' unknown':'');fill.style.width=(job.status==='completado'?100:100*(job.fraction||0))+'%';document.querySelector('#times').textContent='Transcurrido: '+clock(job.elapsed)+' · Restante de esta etapa: '+(job.status==='completado'?'completado':job.eta===null?'calculando…':clock(job.eta));document.querySelector('#details').textContent=job.status==='error'?'La tarea terminó con un error. Revisa el mensaje.':job.status==='completado'?'Tarea completada.':(job.fraction===null?'Avance por determinar':Math.round(job.fraction*100)+' % de esta etapa')+' · La estimación puede cambiar.';}catch(e){document.querySelector('#details').textContent='Esperando información del proceso…';}}
+update();setInterval(update,700);
 </script>'''

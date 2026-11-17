@@ -27,11 +27,15 @@ def probe(path):
     return dict(duration=duration, width=video['width'], height=video['height'],
                 audio=any(s['codec_type'] == 'audio' for s in raw['streams']))
 
-def audio(path, start, duration, rate=16000):
+def audio(path, start, duration, rate=16000, progress=None):
     import numpy as np
-    raw = run(['ffmpeg', '-v', 'error', '-ss', start, '-i', path, '-t', duration,
-               '-vn', '-ac', '1', '-ar', rate, '-f', 'f32le', 'pipe:1'])
-    return np.frombuffer(raw, dtype=np.float32).copy()
+    cmd=['ffmpeg','-v','error','-ss',start,'-i',path,'-t',duration,'-vn','-ac','1','-ar',rate]
+    if progress:
+        from .observed import run_observed
+        raw=run_observed(cmd+['-progress','pipe:2','-nostats','-f','f32le','pipe:1'],progress,duration=duration,binary=True,stage='Leyendo audio del bloque')
+    else:raw=run(cmd+['-f','f32le','pipe:1'])
+    return np.frombuffer(raw,dtype=np.float32).copy()
+
 
 def preview(path, start, end, output):
     import uuid

@@ -30,12 +30,16 @@ class Store:
                 yield c
         finally:
             c.close()
-    def register(self, path, name=None):
+    def register(self, path, name=None, progress=None):
         path = Path(path).resolve()
         h = hashlib.sha256()
+        total=path.stat().st_size;done=0
+        if progress: progress(dict(stage='Registrando archivo',done=0,total=total))
         with path.open('rb') as f:
             for block in iter(lambda: f.read(1024*1024), b''):
                 h.update(block)
+                done+=len(block)
+                if progress:progress(dict(done=done,total=total))
         sid = h.hexdigest()
         with self.connect() as c:
             c.execute('INSERT OR IGNORE INTO sources(id,name,path) VALUES(?,?,?)', (sid, name or path.name, str(path)))
@@ -154,12 +158,17 @@ class Store:
     def save_settings(self,sid,settings):
         with self.connect() as c: c.execute('INSERT OR REPLACE INTO project_settings VALUES(?,?)',(sid,json.dumps(settings,ensure_ascii=False)))
 
-    def find_import(self,url,start,end,mode):
+    def find_import(self,url,start,end,mode,expected_duration=None,height=None):
         with self.connect() as c:
             rows=c.execute('SELECT sources.*,project_settings.payload AS settings FROM sources JOIN project_settings ON project_settings.source=sources.id').fetchall()
         for row in rows:
             settings=json.loads(row['settings']); original=settings.get('import',{})
-            if original.get('live'): continue
+            if original.get('live') or original.get('complete') is False: continue
+            if height is not None and original.get('height',1080)!=height: continue
             if original.get('url')==url and original.get('start')==start and original.get('end')==end and original.get('mode')==mode and Path(row['path']).is_file():
+                if expected_duration:
+                    from .media import probe
+                    from .sources import incomplete_duration
+                    if incomplete_duration(expected_duration,probe(row['path'])['duration']): continue
                 return row['id'],settings
         return None

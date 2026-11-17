@@ -4,6 +4,10 @@ import uuid
 import os
 import html
 import hashlib
+import time
+from concurrent.futures import ThreadPoolExecutor
+from cliplivre.progress import Jobs
+from cliplivre.controls import clock
 import streamlit as st
 from cliplivre.store import Store
 from cliplivre.sources import import_local,import_url,inspect_url,EXTENSIONS,twitch_channel_videos
@@ -15,6 +19,16 @@ from cliplivre.signals import silent_intervals
 ROOT=Path(os.environ.get('CLIP_LIBRE_DATA',str(Path(__file__).resolve().parent/'data')))
 st.set_page_config(page_title='Clip Libre · Estudio de clips',page_icon='🎬',layout='wide')
 store=Store(ROOT)
+if 'progress_jobs' not in st.session_state:st.session_state['progress_jobs']=Jobs()
+progress_jobs=st.session_state['progress_jobs']
+
+def monitored(job,stage,fn,*args,**kwargs):
+    job.start(stage)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future=pool.submit(fn,*args,**kwargs)
+        while not future.done():time.sleep(.15)
+        return future.result()
+
 st.markdown('''<style>
 .block-container{max-width:1440px;padding-top:2rem}
 h1{font-size:2.5rem!important;letter-spacing:-.05em;font-weight:750!important}
@@ -57,6 +71,18 @@ def show_clip(path,start,end):
 def new_project():
     st.session_state['source_mode']='Pegar enlace'
     st.session_state['source_url']=''
+
+
+def reopen_source(url):
+    st.session_state['source_mode']='Pegar enlace'
+    st.session_state['source_url']=url
+    st.session_state.pop('link_info',None)
+    st.session_state['refresh_url_pending']=url
+    st.session_state['new_source_settings']={'force_refresh':True}
+    st.session_state['capture_new']='Todo lo disponible'
+
+
+def select_full_source(context):st.session_state['capture_'+str(context)]='Todo lo disponible'
 
 
 def sync_source_inputs(context,key,lower,upper):
@@ -223,6 +249,9 @@ def save_image(upload):
 
 if st.session_state.get('pending_workflow'): st.session_state['workflow']=st.session_state.pop('pending_workflow')
 labels=['1 · Fuente y ajustes','2 · Clips','3 · Editor']
+from cliplivre.playback import media_server,progress_html
+if 'progress_url' not in st.session_state:st.session_state['progress_url']=media_server().progress_url(progress_jobs.recent)
+st.iframe(progress_html(st.session_state['progress_url']),height=155)
 tabs=st.tabs(labels,key='workflow',on_change='rerun')
 with tabs[0]:
     from cliplivre.controls import PRESETS,clip_limits,clock
@@ -245,16 +274,29 @@ with tabs[0]:
         if local_info:
             st.caption('Duración del archivo importado: '+clock(local_info['duration']))
             if tabs[0].open: direct_player(selected_source['path'])
+        original_import=saved_source.get('import',{})
+        original_url=original_import.get('url') or saved_source.get('url')
+        expected=original_import.get('expected_duration')
+        if expected and local_info and expected>local_info['duration']+3:
+            st.warning('Archivo parcial: '+clock(local_info['duration'])+' descargadas de '+clock(expected)+' esperadas. Analizar este proyecto usa solo el archivo disponible.')
+        if original_url:
+            st.button('Actualizar desde el enlace · revisar duración completa',on_click=reopen_source,args=(original_url,),key='refresh_source')
         st.button('＋ Nuevo proyecto',on_click=new_project,key='new_project')
     elif mode=='Pegar enlace':
         url=st.text_input('Enlace de YouTube o Twitch',placeholder='Pega el enlace del video, VOD o directo',key='source_url')
-        if st.button('Comprobar enlace',disabled=not url.strip()):
+        refresh_pending=st.session_state.pop('refresh_url_pending',None)==url.strip()
+        if st.button('Comprobar enlace',disabled=not url.strip()) or refresh_pending:
             try:
-                with st.spinner('Leyendo el enlace…'): st.session_state['link_info']=dict(url=url.strip(),**inspect_url(url))
-            except Exception as e: st.session_state.pop('link_info',None); st.error(str(e))
+                job=progress_jobs.new('Comprobando duración del enlace')
+                info=monitored(job,'Comprobando duración del enlace',inspect_url,url)
+                st.session_state['link_info']=dict(url=url.strip(),checked_at=time.time(),**info)
+                job.finish('Duración anunciada: '+clock(info['duration']) if info.get('duration') else 'Enlace comprobado')
+            except Exception as e: job.fail(e); st.session_state.pop('link_info',None); st.error(str(e))
         remote_info=st.session_state.get('link_info',{})
         if remote_info.get('url')!=url.strip(): remote_info={}
-        if remote_info: st.success(remote_info['title'])
+        if remote_info:
+            st.success(remote_info['title'])
+            if remote_info.get('duration'): st.caption('Duración anunciada por el enlace: '+clock(remote_info['duration']))
     else:
         upload=st.file_uploader('Video o podcast',type=[x[1:] for x in sorted(EXTENSIONS)])
         with st.expander('Archivo de más de 200 MB'):
@@ -266,15 +308,17 @@ with tabs[0]:
     if origin and local_info: st.caption('Este archivo corresponde al stream desde '+clock(origin)+' hasta '+clock(origin+local_info['duration'])+'. Para otro tramo, pega de nuevo el enlace.')
     with st.container(border=True):
         st.subheader('Parte del stream que quieres usar')
+        if duration:st.caption('Duración disponible: '+clock(duration)+' · '+str(round(duration/60,2))+' minutos, sin límite de cuatro horas.')
         capture_options=['Todo lo disponible','Elegir inicio y fin']+(['Grabar desde ahora'] if mode=='Pegar enlace' else [])
         capture_default=saved_source.get('capture_mode','Todo lo disponible') if saved_source.get('last_mode')==mode else 'Todo lo disponible'
         if capture_default not in capture_options: capture_default=capture_options[0]
         capture_mode=st.radio('Captura',capture_options,index=capture_options.index(capture_default),horizontal=True,key='capture_'+str(ctx))
         source_start=origin; source_end=None
+        if duration:st.button('Usar todo el intervalo disponible',on_click=select_full_source,args=(ctx,),disabled=capture_mode=='Todo lo disponible',key='full_'+str(ctx))
         if capture_mode=='Elegir inicio y fin':
             a,b=st.columns(2)
             initial_start=(origin+float(saved_source.get('local_start',0)))/60 if mode=='Proyecto actual' else float(saved_source.get('capture_start',0))/60
-            initial_end=(origin+float(saved_source.get('local_end') or duration or 1800))/60 if mode=='Proyecto actual' else float(saved_source.get('capture_end') or min(duration or 1800,1800))/60
+            initial_end=(origin+float(saved_source.get('local_end') or duration or 1800))/60 if mode=='Proyecto actual' else float(saved_source.get('capture_end') or duration or 1800)/60
             range_key=f'source_range_{ctx}_{duration:.3f}' if duration else ''
             start_minutes=a.number_input('Inicio del stream (min)',min_value=origin/60,value=initial_start,step=1.,key='capture_start_'+str(ctx),on_change=sync_source_inputs,args=(str(ctx),range_key,origin/60,(origin+(duration or 864000))/60))
             end_minutes=b.number_input('Fin del stream (min)',min_value=origin/60,value=max(initial_start+.1,initial_end),step=1.,key='capture_end_'+str(ctx),on_change=sync_source_inputs,args=(str(ctx),range_key,origin/60,(origin+(duration or 864000))/60))
@@ -323,18 +367,32 @@ with tabs[0]:
             use_ollama=st.checkbox('Clasificación con Ollama',value=saved_source.get('ollama',False),key='ollama_'+str(ctx))
             ollama_model=st.text_input('Modelo Ollama',value=saved_source.get('ollama_model','qwen3:4b'),key='ollama_model_'+str(ctx))
             st.caption('Los cambios de duración reutilizan la transcripción. Cambiar modelo o idioma puede requerir procesar de nuevo. No hay un segundo panel de análisis.')
+    quality_names={'360p · descarga más ligera':360,'720p':720,'1080p · mayor tamaño':1080}
+    quality_height=1080
+    if mode=='Pegar enlace':
+        quality=st.selectbox('Calidad del video que se descargará',list(quality_names),index=2)
+        quality_height=quality_names[quality]
+        st.caption('360p descarga menos datos; la fuente guardada tendrá esa resolución. Ninguna opción reduce la duración del directo.')
     permission=st.checkbox('Tengo acceso permitido y permiso para procesar y reutilizar este contenido.')
     if st.button('Generar clips',type='primary',disabled=not permission or bool(limits_error) or needs_vod,width='stretch'):
         new_sid=None
+        job=progress_jobs.new('Generando clips')
         try:
             if source_end is not None and source_end<=source_start: raise ValueError('El fin del stream debe ser posterior al inicio.')
             with st.status('Preparando tu contenido…',expanded=True) as status:
                 if mode=='Pegar enlace':
-                    reusable=store.find_import(url.strip(),source_start,source_end,capture_mode)
+                    reusable=store.find_import(url.strip(),source_start,source_end,capture_mode,height=quality_height)
+                    old_import=reusable[1].get('import',{}) if reusable else {}
+                    recent=old_import.get('checked_at',0)>time.time()-300 and old_import.get('expected_duration')
+                    if not remote_info and (not recent or saved_source.get('force_refresh')):
+                        remote_info=monitored(job,'Comprobando duración actual',inspect_url,url)
+                    expected=(source_end-source_start) if source_end is not None else remote_info.get('duration') or old_import.get('expected_duration')
+                    if reusable and expected:
+                        reusable=store.find_import(url.strip(),source_start,source_end,capture_mode,expected_duration=expected,height=quality_height)
                     live_mode='actual' if capture_mode=='Grabar desde ahora' else 'disponible'
                     if not reusable:
                         status.update(label='Comprobando el enlace…')
-                        if not remote_info: remote_info=inspect_url(url)
+                        if not remote_info: remote_info=monitored(job,'Comprobando el enlace',inspect_url,url)
                         if capture_mode=='Grabar desde ahora' and not remote_info.get('live'): raise ValueError('Ese enlace no está emitiendo en directo. Elige Todo lo disponible o inicio–fin.')
                     if reusable:
                         new_sid,import_settings=reusable
@@ -342,21 +400,21 @@ with tabs[0]:
                         import_description=import_settings.get('import',{})
                     else:
                         status.update(label='Descargando la fuente. El análisis comienza al terminar la descarga…')
-                        dest=import_url(url,ROOT,source_start,source_end,permission,live_mode=live_mode)
+                        dest=monitored(job,'Descargando fuente',import_url,url,ROOT,source_start,source_end,permission,live_mode=live_mode,progress=job.update,height=quality_height)
                         name=title_hint.strip() or remote_info.get('title') or url
-                        new_sid=store.register(dest,name)
-                        import_description=dict(url=url.strip(),start=source_start,end=source_end,mode=capture_mode,live=bool(remote_info.get('live')))
+                        new_sid=monitored(job,'Registrando archivo',store.register,dest,name,progress=job.update)
+                        import_description=dict(url=url.strip(),start=source_start,end=source_end,mode=capture_mode,live=bool(remote_info.get('live')),expected_duration=expected,checked_at=time.time(),height=quality_height)
                     analysis_start=0.; analysis_end=None
                 elif mode=='Subir archivo':
                     if upload:
                         temp=ROOT/'temporales'; temp.mkdir(exist_ok=True)
                         p=temp/(uuid.uuid4().hex+Path(upload.name).suffix); p.write_bytes(upload.getbuffer())
-                        try: dest=import_local(p,ROOT,permission)
+                        try: dest=monitored(job,'Importando archivo',import_local,p,ROOT,permission,progress=job.update)
                         finally: p.unlink(missing_ok=True)
                         name=title_hint.strip() or upload.name
                     else:
-                        dest=import_local(path,ROOT,permission); name=title_hint.strip() or Path(path.strip().strip('"')).name
-                    new_sid=store.register(dest,name)
+                        dest=monitored(job,'Importando archivo',import_local,path,ROOT,permission,progress=job.update); name=title_hint.strip() or Path(path.strip().strip('"')).name
+                    new_sid=monitored(job,'Registrando archivo',store.register,dest,name,progress=job.update)
                     analysis_start=source_start; analysis_end=source_end; import_description={}
                 else:
                     new_sid=sid; analysis_start=source_start-origin; analysis_end=None if source_end is None else source_end-origin; import_description=saved_source.get('import',{})
@@ -364,13 +422,22 @@ with tabs[0]:
                 options.update(dict(last_mode=mode,local_start=analysis_start,local_end=analysis_end,model_override=override_model,device=device)); options['import']=import_description
                 store.save_settings(new_sid,options)
                 actual_duration=probe(store.source(new_sid)['path'])['duration']
+                from cliplivre.sources import incomplete_duration
+                expected_available=import_description.get('expected_duration')
+                incomplete=incomplete_duration(expected_available,actual_duration)
+                import_description['complete']=not incomplete
+                options['import']=import_description
+                store.save_settings(new_sid,options)
+                if incomplete and mode!='Proyecto actual':
+                    raise ValueError('Importación incompleta: se esperaba '+clock(expected_available)+' y el archivo disponible dura '+clock(actual_duration)+'. Se conserva este proyecto parcial. Pulsa Actualizar desde el enlace para intentar recuperar el contenido completo; no hay un máximo de cuatro horas.')
                 window_length=(analysis_end if analysis_end is not None else actual_duration)-analysis_start
                 if window_length<clip_min:
                     raise ValueError('El tramo dura '+clock(window_length)+' y el mínimo elegido es '+clock(clip_min)+'. Elige una duración menor para generar clips.')
-                bar=st.progress(0.)
-                def update(f,m): bar.progress(max(0.,min(1.,f))); status.update(label=m)
+                analysis_started=time.monotonic()
+                def update(f,m): job.update(stage='Analizando el tramo elegido',done=max(0.,min(1.,f)),total=1,message=m,origin=analysis_started)
                 config=Analysis(transcription=speed!='Ultrarrápido',fast_asr=speed in {'Rápido','Ultrarrápido'},model=({'Ultrarrápido':'tiny','Rápido':'tiny','Equilibrado':'small','Calidad alta':'medium'}[speed] if override_model=='Según velocidad' else override_model),device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=clip_min,max_seconds=clip_max,target_seconds=(clip_min+clip_max)/2 if clip_max is not None else max(clip_min,180),duration_variation=True,visual_step=8 if speed in {'Rápido','Ultrarrápido'} else 2,visual_fast=speed in {'Rápido','Ultrarrápido'},source_start=analysis_start,source_end=analysis_end)
-                report=analyze(store,new_sid,config,update)
+                report=monitored(job,'Analizando el tramo elegido',analyze,store,new_sid,config,update,process_progress=job.update)
+                job.finish('Clips listos. Intervalo revisado: '+clock(analysis_start)+' → '+clock(analysis_end if analysis_end is not None else actual_duration))
                 status.update(label='Clips listos',state='complete')
             st.session_state['pending_project']=new_sid
             st.session_state['pending_mode']='Proyecto actual'
@@ -379,6 +446,7 @@ with tabs[0]:
             st.session_state['import_notice']='Se usó tu rango '+clock(clip_min)+'–'+(clock(clip_max) if clip_max is not None else 'sin máximo')+'. Revisión de todo el tramo terminado.'
             st.rerun()
         except Exception as e:
+            job.fail(e)
             if new_sid and mode!='Proyecto actual':
                 st.session_state['pending_project']=new_sid; st.session_state['pending_mode']='Proyecto actual'; st.session_state['pending_error']=str(e); st.rerun()
             st.error(str(e))
@@ -421,8 +489,11 @@ if sid:
                     if st.button('Ver clip',key='view_button_'+item['id']): st.session_state['view_open_'+item['id']]=True
                     if tabs[1].open and st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
                     from cliplivre.downloads import source_clip
-                    def download_horizontal(path=source['path'],begin=item['start'],finish=item['end'],root=ROOT):
-                        return source_clip(path,begin,finish,root).read_bytes()
+                    def download_horizontal(path=source['path'],begin=item['start'],finish=item['end'],root=ROOT,jobs=progress_jobs):
+                        task=jobs.new('Preparando descarga horizontal')
+                        try:
+                            data=source_clip(path,begin,finish,root,progress=task.update).read_bytes();task.finish('MP4 horizontal listo para descargar');return data
+                        except Exception as e:task.fail(e);raise
                     st.download_button('Descargar clip para CapCut · horizontal',data=download_horizontal,file_name=f"clip_{item['id'][:8]}_horizontal.mp4",mime='video/mp4',key='download_source_'+item['id'],on_click='ignore',width='stretch')
                     st.button('Elegir y editar',key='edit_'+item['id'],on_click=choose_clip,args=(sid,item['id']))
                     a,b=st.columns(2)
@@ -633,11 +704,14 @@ if sid:
                 from cliplivre.downloads import edited_clip
                 download_settings=asdict(replace(edit,burn=False))
                 download_cuts=silent_intervals(audio_context,start,end) if reduce else []
-                def download_edit(path=source['path'],begin=start,finish=end,root=ROOT,settings=json.dumps(download_settings),cuts=json.dumps(download_cuts),candidate_id=cid):
-                    selected=json.loads(settings)
-                    output=edited_clip(path,begin,finish,root,selected,[],json.loads(cuts))
-                    Store(root).export(candidate_id,output,selected)
-                    return output.read_bytes()
+                def download_edit(path=source['path'],begin=start,finish=end,root=ROOT,settings=json.dumps(download_settings),cuts=json.dumps(download_cuts),candidate_id=cid,jobs=progress_jobs):
+                    task=jobs.new('Preparando descarga editada')
+                    try:
+                        selected=json.loads(settings)
+                        output=edited_clip(path,begin,finish,root,selected,[],json.loads(cuts),progress=task.update)
+                        Store(root).export(candidate_id,output,selected)
+                        data=output.read_bytes();task.finish('MP4 editado listo para descargar');return data
+                    except Exception as e:task.fail(e);raise
                 st.download_button('Descargar MP4 editado · sin subtítulos',data=download_edit,file_name=f'clip_{cid[:8]}_editado.mp4',mime='video/mp4',key='download_edit_'+cid,on_click='ignore',type='primary',disabled=missing_photo,width='stretch')
                 st.caption('Descarga directa para CapCut. Se prepara al pulsar; conserva audio, cuadros, textos y logo. Sin subtítulos.')
                 if st.button('Exportar clip con estos ajustes',disabled=missing_photo,width='stretch'):

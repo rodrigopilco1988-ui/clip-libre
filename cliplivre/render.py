@@ -97,7 +97,7 @@ def face_expression(frames,intervals,width):
     return f'max(0,min(iw-ow,iw*({expr})-ow/2))'
 
 
-def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:None):
+def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:None,process_progress=None):
     edit=edit or Edit(); info=probe(path)
     if end>info['duration']+.1: raise ValueError('El final excede la duración del video.')
     if not 1<=edit.zoom<=1.2: raise ValueError('El zoom debe estar entre 1 y 1,2.')
@@ -192,13 +192,21 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     progress('Exportando con NVIDIA NVENC…' if encoder=='h264_nvenc' else 'Exportando en CPU con FFmpeg…')
     # Cambiar cwd global rompería otros trabajos; subprocess aislado.
     import subprocess
+    def execute(command):
+        if not process_progress:return subprocess.run(command,cwd=target,capture_output=True,timeout=max(7200,int(duration*8+600)))
+        from .observed import run_observed
+        from types import SimpleNamespace
+        try:
+            run_observed(command[:-1]+['-progress','pipe:1','-nostats',command[-1]],process_progress,duration=duration,timeout=max(7200,int(duration*8+600)),stage='Codificando MP4 editado',cwd=target)
+            return SimpleNamespace(returncode=0,stderr=b'')
+        except Exception as e:return SimpleNamespace(returncode=1,stderr=str(e).encode('utf-8'))
     try:
-        p=subprocess.run(cmd,cwd=target,capture_output=True,timeout=max(7200,int(duration*8+600)))
+        p=execute(cmd)
         if p.returncode and encoder=='h264_nvenc':
             progress('NVENC no pudo exportar este clip; reintentando en CPU…')
             (target/'editado.mp4').unlink(missing_ok=True)
             encoder='libx264'
-            p=subprocess.run(base_cmd+encoder_options(encoder,edit.preset)+ending,cwd=target,capture_output=True,timeout=max(7200,int(duration*8+600)))
+            p=execute(base_cmd+encoder_options(encoder,edit.preset)+ending)
         if p.returncode: raise RuntimeError(p.stderr.decode('utf-8',errors='replace')[-3500:])
     except Exception:
         (target/'editado.mp4').unlink(missing_ok=True)

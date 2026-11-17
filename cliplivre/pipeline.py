@@ -29,7 +29,7 @@ class Analysis:
     source_end: float | None = None
 
 
-def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcriber=None,max_blocks=None):
+def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcriber=None,max_blocks=None,process_progress=None):
     config=config or Analysis()
     if config.block_minutes<=0 or config.visual_step<.5 or not 1<=config.max_candidates<=20 or config.min_seconds<=0 or config.target_seconds<=0 or (config.max_seconds is not None and config.max_seconds<config.min_seconds):
         raise ValueError('Configuración de análisis inválida.')
@@ -66,14 +66,14 @@ def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcri
                     segments=cached['segments']; audio=cached['audio']; metadata=cached['metadata']; cache_hits+=1; reused_transcriptions+=int(config.transcription)
                     progress((cursor-range_start)/(range_end-range_start),'Reutilizando análisis guardado…')
                 else:
-                    samples=media.audio(source['path'],cursor,end-cursor) if info['audio'] else []
+                    samples=media.audio(source['path'],cursor,end-cursor,progress=process_progress) if info['audio'] else []
                     if len(samples) and not config.transcription:
                         segments,metadata=[],dict(device='sin transcripción',transcription='pendiente para el clip elegido')
                     elif len(samples):
                         if transcriber:
                             segments,metadata=transcriber(samples,config.model,config.device,config.language)
                         else:
-                            segments,metadata=transcribe.transcribe(samples,config.model,config.device,config.language,fast=config.fast_asr,progress=lambda m:progress((cursor-range_start)/(range_end-range_start),m))
+                            segments,metadata=transcribe.transcribe(samples,config.model,config.device,config.language,fast=config.fast_asr,process_progress=process_progress,progress=lambda m:progress((cursor-range_start)/(range_end-range_start),m))
                     else: segments,metadata=[],dict(device='sin audio')
                     for seg in segments:
                         seg['start']+=cursor; seg['end']+=cursor
