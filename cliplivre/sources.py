@@ -157,7 +157,7 @@ def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible'
         if live and live_mode=='actual':
             return capture_live(info,folder,end-start)
         import sys
-        cmd=[sys.executable,'-m','yt_dlp','--no-playlist','--no-progress','--socket-timeout','20','--retries','1',
+        cmd=[sys.executable,'-m','yt_dlp','--no-playlist','--no-progress','--concurrent-fragments','4','--socket-timeout','20','--retries','1',
              '-f','bv*[height<=1080]+ba/b[height<=1080]',
              '--merge-output-format','mkv','-o',str(folder/'fuente.%(ext)s')]
         runtime=local_deno()

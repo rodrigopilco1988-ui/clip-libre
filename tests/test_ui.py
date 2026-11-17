@@ -191,3 +191,27 @@ def test_twitch_channel_offers_vod_and_explicit_recording_before_import(tmp_path
     next(x for x in app.radio if x.label=='Captura').set_value('Todo lo disponible').run()
     next(x for x in app.text_input if x.label=='Enlace de YouTube o Twitch').set_value('https://www.twitch.tv/videos/123').run()
     assert not app.exception and not next(b for b in app.button if b.label=='Generar clips').disabled
+
+
+def test_reused_vod_generates_without_network_metadata(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    from cliplivre import sources,pipeline
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'cached-vod-ui'))
+    store=Store(tmp_path/'cached-vod-ui');sid=store.register(video)
+    url='https://www.twitch.tv/videos/123'
+    store.save_settings(sid,{'import':dict(url=url,start=0,end=None,mode='Todo lo disponible',live=False)})
+    def no_network(*a,**kw): raise AssertionError('Un VOD ya descargado no necesita consultar ni descargar de nuevo')
+    monkeypatch.setattr(sources,'inspect_url',no_network);monkeypatch.setattr(sources,'import_url',no_network)
+    calls=[]
+    def analysis(store,source,config,progress):
+        calls.append(source);return dict(warnings=[])
+    monkeypatch.setattr(pipeline,'analyze',analysis)
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(x for x in app.radio if x.label=='Fuente').set_value('Pegar enlace').run()
+    next(x for x in app.text_input if x.label=='Enlace de YouTube o Twitch').set_value(url).run()
+    next(x for x in app.selectbox if x.label=='Duración de cada clip').select('Personalizado').run()
+    next(x for x in app.text_input if x.label=='Mínimo (min:seg)').set_value('0:01').run()
+    next(x for x in app.text_input if x.label=='Máximo (min:seg)').set_value('0:03').run()
+    next(x for x in app.checkbox if x.label.startswith('Tengo acceso permitido')).check().run()
+    next(b for b in app.button if b.label=='Generar clips').click().run(timeout=30)
+    assert not app.exception and not app.error and calls==[sid]

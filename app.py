@@ -327,15 +327,18 @@ with tabs[0]:
             if source_end is not None and source_end<=source_start: raise ValueError('El fin del stream debe ser posterior al inicio.')
             with st.status('Preparando tu contenido…',expanded=True) as status:
                 if mode=='Pegar enlace':
-                    if not remote_info: remote_info=inspect_url(url)
+                    reusable=store.find_import(url.strip(),source_start,source_end,capture_mode)
                     live_mode='actual' if capture_mode=='Grabar desde ahora' else 'disponible'
-                    if capture_mode=='Grabar desde ahora' and not remote_info.get('live'): raise ValueError('Ese enlace no está emitiendo en directo. Elige Todo lo disponible o inicio–fin.')
-                    reusable=store.find_import(url.strip(),source_start,source_end,capture_mode) if not remote_info.get('live') else None
+                    if not reusable:
+                        status.update(label='Comprobando el enlace…')
+                        if not remote_info: remote_info=inspect_url(url)
+                        if capture_mode=='Grabar desde ahora' and not remote_info.get('live'): raise ValueError('Ese enlace no está emitiendo en directo. Elige Todo lo disponible o inicio–fin.')
                     if reusable:
                         new_sid,import_settings=reusable
                         status.update(label='Fuente ya descargada: reutilizando el archivo…')
                         import_description=import_settings.get('import',{})
                     else:
+                        status.update(label='Descargando la fuente. El análisis comienza al terminar la descarga…')
                         dest=import_url(url,ROOT,source_start,source_end,permission,live_mode=live_mode)
                         name=title_hint.strip() or remote_info.get('title') or url
                         new_sid=store.register(dest,name)

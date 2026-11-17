@@ -42,6 +42,7 @@ def test_source_window_thirty_to_one_ten_has_no_fifty_minute_cap(video,tmp_path,
     assert import_url('https://www.twitch.tv/videos/123',tmp_path,1800,6600,True).exists()
     assert commands[0][commands[0].index('--download-sections')+1]=='*1800-6600'
     assert '--force-keyframes-at-cuts' not in commands[0]
+    assert commands[0][commands[0].index('--concurrent-fragments')+1]=='4'
 
 
 def test_whole_youtube_live_means_snapshot_not_five_minutes(video,tmp_path,monkeypatch):
