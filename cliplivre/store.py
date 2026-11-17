@@ -13,6 +13,7 @@ class Store:
         with self.connect() as c:
             c.executescript('''
             PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS project_settings(source TEXT PRIMARY KEY, payload TEXT);
             CREATE TABLE IF NOT EXISTS artifacts(source TEXT, kind TEXT, start REAL, end REAL, payload TEXT, PRIMARY KEY(source,kind,start,end));
             CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL, created TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS chunks(source TEXT, session TEXT, start REAL, end REAL, config TEXT, payload TEXT, PRIMARY KEY(source,start,end,config));
@@ -60,17 +61,22 @@ class Store:
                     cid=uuid.uuid4().hex
                     c.execute('INSERT INTO candidates(id,source,start,end,payload) VALUES(?,?,?,?,?)',(cid,sid,item['start'],item['end'],json.dumps(item,ensure_ascii=False)))
                     continue
-                protected=False
+                protected=[]; mutable=[]
                 for row in overlaps:
-                    payload=json.loads(row['payload'])
+                    old_payload=json.loads(row['payload'])
                     has_export=c.execute('SELECT 1 FROM exports WHERE candidate=? LIMIT 1',(row['id'],)).fetchone()
-                    if row['state']!='pendiente' or 'edited_words' in payload or 'edit_settings' in payload or has_export:
-                        protected=True; break
-                if not protected:
-                    # Una nueva duración sustituye propuestas automáticas, no trabajo humano.
-                    keeper=overlaps[0]['id']
-                    for row in overlaps[1:]: c.execute('DELETE FROM candidates WHERE id=?',(row['id'],))
+                    if row['state']!='pendiente' or 'edited_words' in old_payload or 'edit_settings' in old_payload or has_export: protected.append(row)
+                    else: mutable.append(row)
+                limits=item.get('duration_limits',{}); lo=limits.get('minimum',0); hi=limits.get('maximum')
+                if protected:
+                    # Conserva trabajo humano. Un rango nuevo puede crear alternativas sin borrarlo.
+                    if hi is None or any(lo-.01<=row['end']-row['start']<=hi+.01 for row in protected): continue
+                if mutable:
+                    keeper=mutable[0]['id']
+                    for row in mutable[1:]: c.execute('DELETE FROM candidates WHERE id=?',(row['id'],))
                     c.execute('UPDATE candidates SET start=?,end=?,payload=? WHERE id=?',(item['start'],item['end'],json.dumps(item,ensure_ascii=False),keeper))
+                else:
+                    c.execute('INSERT INTO candidates(id,source,start,end,payload) VALUES(?,?,?,?,?)',(uuid.uuid4().hex,sid,item['start'],item['end'],json.dumps(item,ensure_ascii=False)))
             c.execute('INSERT OR REPLACE INTO chunks VALUES(?,?,?,?,?,?)', (sid,session,start,end,config,json.dumps(payload,ensure_ascii=False)))
     def candidates(self, sid):
         with self.connect() as c:
@@ -95,7 +101,30 @@ class Store:
     def artifact(self,sid,kind,start,end):
         with self.connect() as c:
             row=c.execute('SELECT payload FROM artifacts WHERE source=? AND kind=? AND start=? AND end=?',(sid,kind,start,end)).fetchone()
-        return json.loads(row[0]) if row else None
+            if row: return json.loads(row[0])
+            if not kind.startswith('asr-v2:'): return None
+            rows=[dict(r) for r in c.execute('SELECT start,end,payload FROM artifacts WHERE source=? AND kind=? AND start<? AND end>? ORDER BY start',(sid,kind,end,start))]
+        cursor=start; chosen=[]
+        while cursor<end-.001:
+            options=[r for r in rows if r['start']<=cursor+.001 and r['end']>cursor+.001]
+            if not options: return None
+            row=max(options,key=lambda r:r['end']); stop=min(end,row['end'])
+            chosen.append((cursor,stop,json.loads(row['payload']))); cursor=stop
+        if not chosen: return None
+        segments=[]; audio={}; seen=set()
+        for a,b,payload in chosen:
+            for segment in payload.get('segments',[]):
+                if segment['start']>=b or segment['end']<=a: continue
+                words=[]
+                for word in segment.get('words',[]):
+                    if word['start']>=b or word['end']<=a: continue
+                    key=(word['start'],word['end'],word['text'])
+                    if key in seen: continue
+                    seen.add(key); words.append(dict(word,start=max(a,word['start']),end=min(b,word['end'])))
+                segments.append(dict(segment,start=max(a,segment['start']),end=min(b,segment['end']),words=words,text=' '.join(w['text'] for w in words) if words else segment['text']))
+            for f in payload.get('audio',[]):
+                if a<=f['time']<b: audio[f['time']]=f
+        return dict(segments=sorted(segments,key=lambda s:s['start']),audio=sorted(audio.values(),key=lambda f:f['time']),metadata=dict(chosen[0][2].get('metadata',{}),cache_slice=True))
 
     def save_artifact(self,sid,kind,start,end,payload):
         with self.connect() as c:
@@ -116,4 +145,21 @@ class Store:
                         if all(k in payload for k in ['segments','audio','metadata']):
                             return {k:payload[k] for k in ['segments','audio','metadata']}
                 except (KeyError,ValueError,TypeError): continue
+        return None
+
+    def settings(self,sid):
+        with self.connect() as c: row=c.execute('SELECT payload FROM project_settings WHERE source=?',(sid,)).fetchone()
+        return json.loads(row[0]) if row else {}
+
+    def save_settings(self,sid,settings):
+        with self.connect() as c: c.execute('INSERT OR REPLACE INTO project_settings VALUES(?,?)',(sid,json.dumps(settings,ensure_ascii=False)))
+
+    def find_import(self,url,start,end,mode):
+        with self.connect() as c:
+            rows=c.execute('SELECT sources.*,project_settings.payload AS settings FROM sources JOIN project_settings ON project_settings.source=sources.id').fetchall()
+        for row in rows:
+            settings=json.loads(row['settings']); original=settings.get('import',{})
+            if original.get('live'): continue
+            if original.get('url')==url and original.get('start')==start and original.get('end')==end and original.get('mode')==mode and Path(row['path']).is_file():
+                return row['id'],settings
         return None

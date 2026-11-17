@@ -3,6 +3,8 @@ import shutil
 import uuid
 import sys
 import os
+import time
+import math
 from urllib.parse import urlparse
 from .media import probe,run
 
@@ -23,7 +25,7 @@ def audio_to_video(path,output):
 
 def import_local(path,root,permission=False):
     if not permission: raise ValueError('Confirma que tienes permiso para procesar y reutilizar este material.')
-    path=Path(path).resolve()
+    path=Path(str(path).strip().strip('"')).resolve()
     if path.suffix.lower() not in EXTENSIONS: raise ValueError('Formato no admitido. Usa un video o un podcast MP3, WAV, M4A, AAC, OGG, FLAC u OPUS.')
     if not path.is_file(): raise ValueError('No se encontró el archivo. Comprueba la ruta.')
     if path.suffix.lower() in VIDEO_EXTENSIONS: probe(path)
@@ -86,7 +88,11 @@ def inspect_url(url):
     info=extract_info(url)
     provider='Twitch' if 'twitch.tv' in urlparse(url).hostname else 'YouTube'
     live=bool(info.get('is_live') or info.get('live_status')=='is_live')
-    return dict(title=info.get('title') or 'Contenido disponible',duration=info.get('duration'),
+    duration=info.get('duration')
+    if live and not duration:
+        since=info.get('release_timestamp') or info.get('timestamp')
+        if since and time.time()>since: duration=time.time()-since
+    return dict(title=info.get('title') or 'Contenido disponible',duration=duration,
                 live=live,provider=provider,kind='Directo en emisión' if live else 'Video / episodio / VOD',
                 license=info.get('license') or 'Comprueba tu permiso de reutilización')
 
@@ -108,21 +114,29 @@ def capture_live(info,folder,seconds):
     return output
 
 
-def import_url(url,root,start=0,end=None,permission=False,live_mode='actual'):
+def import_url(url,root,start=0,end=None,permission=False,live_mode='disponible'):
     if not permission: raise ValueError('Debes confirmar el permiso de acceso y reutilización.')
     url=validate_url(url)
-    if (end is None and start!=0) or start<0 or (end is not None and (end<=start or end-start>3000)):
-        raise ValueError('El tramo debe durar entre 1 segundo y 50 minutos. También puedes importar el video completo.')
+    if not math.isfinite(start) or start<0 or (end is not None and (not math.isfinite(end) or end<=start)):
+        raise ValueError('El fin debe ser posterior al inicio. Puedes elegir cualquier intervalo disponible del stream.')
     try:
         info=extract_info(url)
         live=bool(info.get('is_live') or info.get('live_status')=='is_live')
-        if live and start>0 and live_mode!='historial':
+        if live and start>0 and live_mode=='actual':
             raise ValueError('La recuperación histórica no está garantizada. Elige capturar desde ahora o usa el VOD.')
-        if live and end is None:
-            raise ValueError('Para un directo, elige una duración de captura finita.')
-        if live_mode not in {'actual','historial'}: raise ValueError('Modo de directo inválido.')
-        if live and live_mode=='historial' and 'twitch.tv' in urlparse(url).hostname:
-            raise ValueError('Twitch no ofrece aquí recuperación histórica del directo activo. Usa su enlace /videos/ o captura desde ahora.')
+        if live_mode not in {'actual','historial','disponible'}: raise ValueError('Modo de directo inválido.')
+        if live and live_mode!='actual' and 'twitch.tv' in urlparse(url).hostname:
+            raise ValueError('Ese enlace es un canal en vivo de Twitch, sin recuperación histórica accesible aquí. Para recuperar minutos anteriores, pega su video guardado: twitch.tv/videos/ID. No se sustituirá por una captura de cinco minutos.')
+        if live and live_mode=='actual' and end is None:
+            raise ValueError('Elige cuántos minutos quieres grabar desde ahora. No se aplican cinco minutos automáticamente.')
+        if live and live_mode!='actual' and end is None:
+            duration=info.get('duration')
+            if not duration:
+                since=info.get('release_timestamp') or info.get('timestamp')
+                if since and time.time()>since: duration=time.time()-since
+            if not duration or duration<=start:
+                raise ValueError('No se pudo determinar el historial disponible. Elige inicio y fin, o utiliza el VOD autorizado.')
+            end=float(duration)
         folder=Path(root)/'originales'/uuid.uuid4().hex; folder.mkdir(parents=True)
         if live and live_mode=='actual':
             return capture_live(info,folder,end-start)
@@ -133,7 +147,7 @@ def import_url(url,root,start=0,end=None,permission=False,live_mode='actual'):
         runtime=local_deno()
         if runtime: cmd+=['--js-runtimes','deno:'+runtime]
         if end is not None:
-            cmd+=['--download-sections',f'*{start}-{end}','--force-keyframes-at-cuts']
+            cmd+=['--download-sections',f'*{start}-{end}']
         if live: cmd+=['--live-from-start']
         cmd+=[url]
         duration=(end-start) if end is not None else (info.get('duration') or 1800)

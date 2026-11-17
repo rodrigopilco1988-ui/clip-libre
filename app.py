@@ -24,7 +24,7 @@ h2,h3{letter-spacing:-.025em} [data-testid="stSidebar"]{border-right:1px solid #
 .stTabs [aria-selected="true"]{color:#b7f171!important}
 [data-testid="stVerticalBlockBorderWrapper"]{border-radius:16px}
 div.stButton>button{border-radius:10px;min-height:42px;font-weight:650}
-div.stButton>button[kind="primary"]{background:#b7f171;color:#10160b;border:0}
+div.stButton>button[kind="primary"]{background:#3e78ff;color:#ffffff;border:0}
 .cl-pill{display:inline-block;color:#b7f171;font-size:11px;letter-spacing:.14em;font-weight:700;padding:7px 12px;border:1px solid #34462b;border-radius:100px}
 .cl-lead{font-size:18px;color:#aeb8c9;max-width:740px;line-height:1.6;margin-bottom:24px}
 .cl-source{color:#aeb8c9;font-size:13px;border:1px solid #30394c;border-radius:9px;padding:9px 13px;display:inline-block;margin:4px}
@@ -32,7 +32,7 @@ div.stButton>button[kind="primary"]{background:#b7f171;color:#10160b;border:0}
 </style>''',unsafe_allow_html=True)
 
 
-def show_clip(path,start,end):
+def legacy_show_clip(path,start,end):
     key=hashlib.sha256(f'{path}:{start:.3f}:{end:.3f}'.encode()).hexdigest()[:24]
     folder=ROOT/'vistas_previas'; folder.mkdir(exist_ok=True)
     dest=folder/(key+'.mp4')
@@ -40,6 +40,36 @@ def show_clip(path,start,end):
         with st.spinner('Preparando vista previa del clip…'):
             preview(path,start,end,dest)
     st.video(str(dest))
+
+def direct_player(path,start=0,end=None):
+    from cliplivre.playback import media_server,player_html
+    import streamlit.components.v1 as components
+    st.iframe(player_html(media_server().url(path),start,end),height=460)
+
+
+def show_clip(path,start,end):
+    direct_player(path,start,end)
+    if Path(path).suffix.lower() not in {'.mp4','.m4v','.webm'}:
+        if st.button('Generar reproducción compatible',key=hashlib.sha256(f'{path}{start}{end}'.encode()).hexdigest()): legacy_show_clip(path,start,end)
+
+
+def new_project():
+    st.session_state['source_mode']='Pegar enlace'
+    st.session_state['source_url']=''
+
+
+def sync_source_inputs(context,key,lower,upper):
+    if not key: return
+    start=st.session_state.get('capture_start_'+context,lower)
+    end=st.session_state.get('capture_end_'+context,upper)
+    st.session_state[key]=tuple(sorted((max(lower,min(upper,start)),max(lower,min(upper,end)))))
+
+
+def sync_source_range(key,context):
+    start,end=st.session_state[key]
+    st.session_state['capture_start_'+context]=start
+    st.session_state['capture_end_'+context]=end
+
 
 with st.sidebar:
     st.title('Clip Libre')
@@ -127,142 +157,228 @@ def clip_context(db,sid,start,end,stamp):
 def choose_clip(source_id,clip_id):
     store.update(clip_id,state='aceptado')
     st.session_state['editor_clip_'+source_id]=clip_id
-    st.session_state['workflow']='4 · Editor y exportación'
+    st.session_state['workflow']='3 · Editor'
 
 
 def resize_panel_count(key,delta):
     st.session_state[key]=max(1,min(3,st.session_state[key]+delta))
 
 
-tabs=st.tabs(['1 · Crear clips','2 · Configurar análisis','3 · Mis clips','4 · Editor y exportación'],key='workflow',on_change='rerun')
+def precise_clock(value):
+    minutes,seconds=divmod(float(value),60)
+    part=f'{seconds:06.3f}'.rstrip('0').rstrip('.')
+    if seconds<10 and not part.startswith('0'): part='0'+part
+    return f'{int(minutes)}:{part}'
+
+
+def sync_clip_timeline(key,cid):
+    start,end=st.session_state[key]
+    st.session_state['edit_start_'+cid]=precise_clock(start*60)
+    st.session_state['edit_end_'+cid]=precise_clock(end*60)
+
+
+def count_layout_changed(cid):
+    n=st.session_state['panel_count_'+cid]
+    if n==2 and st.session_state['layout_'+cid]=='Foto + clip': return
+    st.session_state['layout_'+cid]={1:'Vertical',2:'Dúo',3:'Tres cuadros'}[n]
+
+
+def set_layout(cid):
+    st.session_state['panel_count_'+cid]={'Vertical':1,'Dúo':2,'Tres cuadros':3,'Foto + clip':2}[st.session_state['layout_'+cid]]
+
+
+def change_panel_count(cid,delta):
+    n=max(1,min(3,st.session_state['panel_count_'+cid]+delta))
+    st.session_state['panel_count_'+cid]=n
+    st.session_state['layout_'+cid]={1:'Vertical',2:'Dúo',3:'Tres cuadros'}[n]
+
+
+def add_title(key,duration):
+    st.session_state[key]=st.session_state.get(key,[])+[dict(id=uuid.uuid4().hex,text='Nuevo título',start=0.,end=duration,x=.5,y=.15,size=64,color='#FFFFFF')]
+
+
+def remove_title(key): st.session_state[key]=st.session_state.get(key,[])[:-1]
+
+
+def duplicate_title(key,index):
+    tracks=st.session_state[key]; st.session_state[key]=tracks+[dict(tracks[index],id=uuid.uuid4().hex)]
+
+
+def clear_logo(cid):
+    st.session_state['logo_'+cid]=None
+    st.session_state['logo_revision_'+cid]=st.session_state.get('logo_revision_'+cid,0)+1
+
+
+def save_image(upload):
+    from PIL import Image
+    from io import BytesIO
+    data=upload.getvalue(); image=Image.open(BytesIO(data)).convert('RGBA')
+    folder=ROOT/'assets'; folder.mkdir(exist_ok=True)
+    path=folder/(hashlib.sha256(data).hexdigest()+'.png')
+    if not path.exists(): image.save(path)
+    return str(path)
+
+
+if st.session_state.get('pending_workflow'): st.session_state['workflow']=st.session_state.pop('pending_workflow')
+labels=['1 · Fuente y ajustes','2 · Clips','3 · Editor']
+tabs=st.tabs(labels,key='workflow',on_change='rerun')
 with tabs[0]:
-    st.markdown('<span class="cl-pill">DE CONTENIDO LARGO A CLIPS CORTOS</span>',unsafe_allow_html=True)
-    st.title('Tu próximo clip empieza aquí')
-    st.markdown('<div class="cl-lead">Pega un enlace o sube tu contenido. Encuentra momentos, revisa los clips y edítalos con subtítulos en un solo lugar.</div>',unsafe_allow_html=True)
-    st.markdown(''.join(f'<span class="cl-source">{s}</span>' for s in ['YouTube y Shorts','Twitch: videos y clips','Directos accesibles','Podcasts de audio y video']),unsafe_allow_html=True)
-    with st.container(border=True):
-        mode=st.radio('¿De dónde viene tu contenido?',['YouTube','Twitch','Podcast','Archivo local'],horizontal=True)
-        podcast_input=st.radio('Tipo de podcast',['Archivo de audio o video','Enlace de YouTube o Twitch'],horizontal=True) if mode=='Podcast' else None
-        remote=mode in {'YouTube','Twitch'} or podcast_input=='Enlace de YouTube o Twitch'
-        remote_start=0; remote_end=None; live_mode='actual'; path=''; upload=None; url=''
-        if remote:
-            url=st.text_input('Pega el enlace de tu video, episodio o directo',placeholder='https://www.youtube.com/watch?v=…' if mode!='Twitch' else 'https://www.twitch.tv/videos/… o https://www.twitch.tv/canal')
-            if st.button('Comprobar enlace',disabled=not url.strip()):
-                try:
-                    with st.spinner('Comprobando acceso y tipo de contenido…'):
-                        st.session_state['link_info']=dict(url=url.strip(),**inspect_url(url))
-                except Exception as e:
-                    st.session_state.pop('link_info',None); st.error(str(e))
-            info=st.session_state.get('link_info',{})
-            info=info if info.get('url')==url.strip() else {}
-            if info:
-                st.success(info['title'])
-                st.caption(f"{info['provider']} · {info['kind']}"+(f" · {info['duration']/60:.1f} min" if info.get('duration') else ''))
-            content_type=st.radio('Qué quieres importar',['Video completo / VOD / episodio','Un tramo del video','Directo: capturar desde ahora','YouTube Live: intentar historial'],index=2 if info.get('live') else 0)
-            if content_type=='Un tramo del video' or content_type=='YouTube Live: intentar historial':
-                a,b=st.columns(2)
-                remote_start=a.number_input('Desde el minuto',min_value=0.,value=0.,step=1.)*60
-                duration=b.number_input('Cuántos minutos',min_value=1.,max_value=50.,value=10.,step=1.)*60
-                remote_end=remote_start+duration
-                if 'historial' in content_type: live_mode='historial'
-            elif content_type=='Directo: capturar desde ahora':
-                remote_end=st.number_input('Minutos que quieres capturar desde ahora',1,50,5)*60
-                st.caption('La captura tarda lo que dure el tramo elegido. Después podrás generar los clips. No recupera minutos anteriores.')
-            with st.expander('Qué enlaces puedes usar'):
-                st.write('YouTube: videos, Shorts, episodios y directos. Twitch: /videos/…, clips.twitch.tv/… y canales en emisión. Podcasts de otras plataformas: descarga el archivo con permiso y súbelo aquí.')
-                st.caption('La importación depende del acceso del proveedor. No se eluden bloqueos, DRM ni autenticación. Twitch activo no permite aquí recuperar el pasado: usa su VOD o captura desde ahora. Las rutas remotas siguen pendientes de validación con contenido real.')
-        else:
-            st.subheader('Sube tu podcast' if mode=='Podcast' else 'Sube tu video')
-            upload=st.file_uploader('Arrastra un archivo o haz clic para seleccionarlo',type=[x[1:] for x in sorted(EXTENSIONS)])
-            st.caption('Videos MP4, MOV, MKV y más. Audio MP3, WAV, M4A, AAC, OGG, FLAC y OPUS. Los podcasts de audio reciben una onda visual para exportarlos como video.')
-            with st.expander('Mi archivo pesa más de 200 MB'):
-                path=st.text_input('Pega la ruta del archivo en tu equipo',placeholder=r'C:\Videos\episodio.mkv')
-                st.caption('Puedes copiar la ruta desde el Explorador de Windows. El archivo se procesa desde el disco.')
-        permission=st.checkbox('Tengo acceso permitido y permiso para procesar y reutilizar este contenido.')
-        automatic=st.toggle('Generar clips automáticamente al importar',value=True)
-        with st.expander('Ajustes de creación'):
-            a,b=st.columns(2)
-            initial_model=a.selectbox('Calidad de transcripción',['small','tiny','base','medium'],format_func=lambda m:{'tiny':'Tiny · más rápido','base':'Base · ligero','small':'Small · equilibrado','medium':'Medium · más lento'}[m])
-            initial_language=b.selectbox('Idioma del contenido',['es','en','auto'])
-            initial_full=st.checkbox('Analizar todo el contenido importado',value=True)
-            initial_min=st.number_input('Duración mínima del clip (min)',min_value=.1,value=.5,step=.5)
-            initial_target=st.number_input('Duración orientativa del clip (min)',min_value=.1,value=3.,step=.5)
-            initial_unlimited=st.checkbox('Sin límite máximo de duración del clip',value=True)
-            initial_max=None if initial_unlimited else st.number_input('Duración máxima del clip (min)',min_value=initial_min,value=max(5.,initial_min),step=.5)*60
-            st.caption('Se procesa todo el archivo por bloques guardados. La duración de cada clip es independiente de la duración del directo.')
-        if st.button('Crear clips' if automatic else 'Importar contenido',type='primary',disabled=not permission,width='stretch'):
+    from cliplivre.controls import PRESETS,clip_limits,clock
+    from dataclasses import asdict
+    st.title('Tu video, tus clips')
+    st.caption('1. Elige la parte del stream.  2. Define cuánto durarán los clips.  3. Genera y edita.')
+    if st.session_state.get('pending_mode'):
+        st.session_state['source_mode']=st.session_state.pop('pending_mode')
+    choices=['Proyecto actual','Pegar enlace','Subir archivo'] if sid else ['Pegar enlace','Subir archivo']
+    if st.session_state.get('source_mode') not in choices: st.session_state['source_mode']=choices[0]
+    mode=st.radio('Fuente',choices,horizontal=True,key='source_mode')
+    ctx=sid if mode=='Proyecto actual' else 'new'
+    saved_source=store.settings(sid) if mode=='Proyecto actual' else st.session_state.get('new_source_settings',{})
+    url=''; path=''; upload=None; remote_info={}; local_info=None
+    if mode=='Proyecto actual':
+        selected_source=store.source(sid)
+        try: local_info=probe(selected_source['path'])
+        except Exception as e: st.error(str(e))
+        st.subheader(selected_source['name'])
+        if local_info:
+            st.caption('Duración del archivo importado: '+clock(local_info['duration']))
+            if tabs[0].open: direct_player(selected_source['path'])
+        st.button('＋ Nuevo proyecto',on_click=new_project,key='new_project')
+    elif mode=='Pegar enlace':
+        url=st.text_input('Enlace de YouTube o Twitch',placeholder='Pega el enlace del video, VOD o directo',key='source_url')
+        if st.button('Comprobar enlace',disabled=not url.strip()):
             try:
-                with st.status('Importando contenido…',expanded=True) as status:
-                    if remote:
-                        if not info:
-                            info=inspect_url(url)
-                        if info.get('live') and remote_end is None:
-                            remote_end=300
-                            status.update(label='Directo detectado: capturando los próximos 5 minutos…')
-                        dest=import_url(url,ROOT,remote_start,remote_end,permission,live_mode=live_mode)
-                        name=info.get('title') or url.strip()
-                    elif upload:
+                with st.spinner('Leyendo el enlace…'): st.session_state['link_info']=dict(url=url.strip(),**inspect_url(url))
+            except Exception as e: st.session_state.pop('link_info',None); st.error(str(e))
+        remote_info=st.session_state.get('link_info',{})
+        if remote_info.get('url')!=url.strip(): remote_info={}
+        if remote_info: st.success(remote_info['title'])
+    else:
+        upload=st.file_uploader('Video o podcast',type=[x[1:] for x in sorted(EXTENSIONS)])
+        with st.expander('Archivo de más de 200 MB'):
+            path=st.text_input('Ruta del archivo en tu equipo',placeholder=r'C:\Videos\directo.mkv')
+            st.caption('Puedes pegar la ruta copiada desde el Explorador de Windows.')
+    duration=(local_info or remote_info).get('duration')
+    origin=float(saved_source.get('import',{}).get('start',0)) if mode=='Proyecto actual' else 0.
+    if origin and local_info: st.caption('Este archivo corresponde al stream desde '+clock(origin)+' hasta '+clock(origin+local_info['duration'])+'. Para otro tramo, pega de nuevo el enlace.')
+    with st.container(border=True):
+        st.subheader('Parte del stream que quieres usar')
+        capture_options=['Todo lo disponible','Elegir inicio y fin']+(['Grabar desde ahora'] if mode=='Pegar enlace' else [])
+        capture_default=saved_source.get('capture_mode','Todo lo disponible') if saved_source.get('last_mode')==mode else 'Todo lo disponible'
+        if capture_default not in capture_options: capture_default=capture_options[0]
+        capture_mode=st.radio('Captura',capture_options,index=capture_options.index(capture_default),horizontal=True,key='capture_'+str(ctx))
+        source_start=origin; source_end=None
+        if capture_mode=='Elegir inicio y fin':
+            a,b=st.columns(2)
+            initial_start=(origin+float(saved_source.get('local_start',0)))/60 if mode=='Proyecto actual' else float(saved_source.get('capture_start',0))/60
+            initial_end=(origin+float(saved_source.get('local_end') or duration or 1800))/60 if mode=='Proyecto actual' else float(saved_source.get('capture_end') or min(duration or 1800,1800))/60
+            range_key=f'source_range_{ctx}_{duration:.3f}' if duration else ''
+            start_minutes=a.number_input('Inicio del stream (min)',min_value=origin/60,value=initial_start,step=1.,key='capture_start_'+str(ctx),on_change=sync_source_inputs,args=(str(ctx),range_key,origin/60,(origin+(duration or 864000))/60))
+            end_minutes=b.number_input('Fin del stream (min)',min_value=origin/60,value=max(initial_start+.1,initial_end),step=1.,key='capture_end_'+str(ctx),on_change=sync_source_inputs,args=(str(ctx),range_key,origin/60,(origin+(duration or 864000))/60))
+            source_start=start_minutes*60; source_end=end_minutes*60
+            if duration and duration>1 and tabs[0].open:
+                slider_key=f'source_range_{ctx}_{duration:.3f}'
+                slider_default=tuple(sorted((max(origin/60,min(start_minutes,(origin+duration)/60)),max(origin/60,min(end_minutes,(origin+duration)/60)))))
+                if slider_key not in st.session_state: st.session_state[slider_key]=slider_default
+                st.slider('Barra del tramo (min)',min_value=float(origin/60),max_value=float((origin+duration)/60),step=.1,value=slider_default,key=slider_key,on_change=sync_source_range,args=(slider_key,str(ctx)))
+            st.caption('Se usará '+clock(source_start)+' → '+clock(source_end)+'. Ejemplo: 30 → 110 min es de 0:30:00 a 1:50:00 del stream.')
+        elif capture_mode=='Grabar desde ahora':
+            source_end=st.number_input('Minutos a grabar desde ahora',min_value=1.,value=30.,step=1.,key='record_'+str(ctx))*60
+            st.caption('Solo esta opción espera tiempo real. No recupera el pasado del directo.')
+        else:
+            st.caption('Archivo o VOD completo. En un directo activo, todo el historial que el proveedor permita recuperar. No se reemplaza por cinco minutos.')
+        if mode=='Pegar enlace' and (remote_info.get('live') or capture_mode=='Grabar desde ahora'):
+            st.caption('Para el pasado de Twitch usa el VOD /videos/ID. Un canal activo no entrega aquí su historial. YouTube Live necesita historial disponible.')
+    with st.container(border=True):
+        st.subheader('Duración de los clips que vas a generar')
+        preset_names=list(PRESETS)
+        preset_default=saved_source.get('preset','30–90 s · variado')
+        preset=st.selectbox('Duración de cada clip',preset_names,index=preset_names.index(preset_default) if preset_default in preset_names else 0,key='clip_preset_'+str(ctx))
+        custom_min='0:30'; custom_max='1:30'
+        if preset=='Personalizado':
+            a,b=st.columns(2)
+            custom_min=a.text_input('Mínimo (min:seg)',value=saved_source.get('custom_min','0:30'),key='clip_min_'+str(ctx))
+            custom_max=b.text_input('Máximo (min:seg)',value=saved_source.get('custom_max','1:30'),key='clip_max_'+str(ctx))
+        limits_error=None
+        try: clip_min,clip_max=clip_limits(preset,custom_min,custom_max)
+        except ValueError as e: limits_error=str(e); clip_min,clip_max=30.,90.; st.error(limits_error)
+        st.caption('Clips de '+clock(clip_min)+' a '+(clock(clip_max) if clip_max is not None else 'sin máximo')+'. Las duraciones varían dentro del rango elegido; no se generan clips por encima del máximo.')
+        title_hint=st.text_input('Título del proyecto (opcional)',value=saved_source.get('title',''),key='project_title_'+str(ctx))
+        profile_names=['Rápido','Equilibrado','Calidad alta']
+        speed=st.selectbox('Velocidad',profile_names,index=profile_names.index(saved_source.get('speed','Rápido')),key='speed_'+str(ctx))
+        with st.expander('Más opciones'):
+            lang_options=['es','en','auto']
+            language=st.selectbox('Idioma',lang_options,index=lang_options.index(saved_source.get('language','es')),key='language_'+str(ctx))
+            override_model=st.selectbox('Modelo de transcripción',['Según velocidad','tiny','base','small','medium'],index=['Según velocidad','tiny','base','small','medium'].index(saved_source.get('model_override','Según velocidad')),key='model_override_'+str(ctx))
+            device=st.selectbox('Procesador',['auto','cpu','cuda'],index=['auto','cpu','cuda'].index(saved_source.get('device','auto')),key='device_'+str(ctx))
+            use_ollama=st.checkbox('Clasificación con Ollama',value=saved_source.get('ollama',False),key='ollama_'+str(ctx))
+            ollama_model=st.text_input('Modelo Ollama',value=saved_source.get('ollama_model','qwen3:4b'),key='ollama_model_'+str(ctx))
+            st.caption('Los cambios de duración reutilizan la transcripción. Cambiar modelo o idioma puede requerir procesar de nuevo. No hay un segundo panel de análisis.')
+    permission=st.checkbox('Tengo acceso permitido y permiso para procesar y reutilizar este contenido.')
+    if st.button('Generar clips',type='primary',disabled=not permission or bool(limits_error),width='stretch'):
+        new_sid=None
+        try:
+            if source_end is not None and source_end<=source_start: raise ValueError('El fin del stream debe ser posterior al inicio.')
+            with st.status('Preparando tu contenido…',expanded=True) as status:
+                if mode=='Pegar enlace':
+                    if not remote_info: remote_info=inspect_url(url)
+                    live_mode='actual' if capture_mode=='Grabar desde ahora' else 'disponible'
+                    if capture_mode=='Grabar desde ahora' and not remote_info.get('live'): raise ValueError('Ese enlace no está emitiendo en directo. Elige Todo lo disponible o inicio–fin.')
+                    reusable=store.find_import(url.strip(),source_start,source_end,capture_mode) if not remote_info.get('live') else None
+                    if reusable:
+                        new_sid,import_settings=reusable
+                        status.update(label='Fuente ya descargada: reutilizando el archivo…')
+                        import_description=import_settings.get('import',{})
+                    else:
+                        dest=import_url(url,ROOT,source_start,source_end,permission,live_mode=live_mode)
+                        name=title_hint.strip() or remote_info.get('title') or url
+                        new_sid=store.register(dest,name)
+                        import_description=dict(url=url.strip(),start=source_start,end=source_end,mode=capture_mode,live=bool(remote_info.get('live')))
+                    analysis_start=0.; analysis_end=None
+                elif mode=='Subir archivo':
+                    if upload:
                         temp=ROOT/'temporales'; temp.mkdir(exist_ok=True)
-                        p=temp/(uuid.uuid4().hex+Path(upload.name).suffix)
-                        p.write_bytes(upload.getbuffer())
+                        p=temp/(uuid.uuid4().hex+Path(upload.name).suffix); p.write_bytes(upload.getbuffer())
                         try: dest=import_local(p,ROOT,permission)
                         finally: p.unlink(missing_ok=True)
-                        name=upload.name
+                        name=title_hint.strip() or upload.name
                     else:
-                        dest=import_local(path,ROOT,permission); name=Path(path).name
+                        dest=import_local(path,ROOT,permission); name=title_hint.strip() or Path(path.strip().strip('"')).name
                     new_sid=store.register(dest,name)
-                    if automatic:
-                        bar=st.progress(0.)
-                        def initial_progress(f,m):
-                            bar.progress(min(1.,max(0.,f))); status.update(label=m)
-                        report=analyze(store,new_sid,Analysis(model=initial_model,language='' if initial_language=='auto' else initial_language,min_seconds=initial_min*60,max_seconds=initial_max,target_seconds=initial_target*60,visual_step=6),initial_progress,max_blocks=None if initial_full else 1)
-                        st.session_state['import_warnings']=report['warnings']
-                        for warning in report['warnings']: st.warning(warning)
-                    status.update(label='Tu proyecto está listo',state='complete')
-                st.session_state['pending_project']=new_sid
-                st.session_state['import_notice']='Contenido listo. Abre Mis clips para revisar tus propuestas.' if automatic else 'Contenido importado. Abre Configurar análisis para generar tus clips.'
-                st.rerun()
-            except Exception as e: st.error(str(e))
+                    analysis_start=source_start; analysis_end=source_end; import_description={}
+                else:
+                    new_sid=sid; analysis_start=source_start-origin; analysis_end=None if source_end is None else source_end-origin; import_description=saved_source.get('import',{})
+                options=dict(preset=preset,clip_min=clip_min,clip_max=clip_max,custom_min=custom_min,custom_max=custom_max,speed=speed,language=language,ollama=use_ollama,ollama_model=ollama_model,title=title_hint,capture_mode=capture_mode,capture_start=source_start,capture_end=source_end,url=url if mode=='Pegar enlace' else saved_source.get('url',''),stream_origin=source_start if mode=='Pegar enlace' else saved_source.get('stream_origin',0))
+                options.update(dict(last_mode=mode,local_start=analysis_start,local_end=analysis_end,model_override=override_model,device=device)); options['import']=import_description
+                store.save_settings(new_sid,options)
+                actual_duration=probe(store.source(new_sid)['path'])['duration']
+                window_length=(analysis_end if analysis_end is not None else actual_duration)-analysis_start
+                if window_length<clip_min:
+                    raise ValueError('El tramo dura '+clock(window_length)+' y el mínimo elegido es '+clock(clip_min)+'. Elige una duración menor para generar clips.')
+                bar=st.progress(0.)
+                def update(f,m): bar.progress(max(0.,min(1.,f))); status.update(label=m)
+                config=Analysis(model=({'Rápido':'tiny','Equilibrado':'small','Calidad alta':'medium'}[speed] if override_model=='Según velocidad' else override_model),device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=clip_min,max_seconds=clip_max,target_seconds=(clip_min+clip_max)/2 if clip_max is not None else max(clip_min,180),duration_variation=True,visual_step=8 if speed=='Rápido' else 2,visual_fast=speed=='Rápido',source_start=analysis_start,source_end=analysis_end)
+                report=analyze(store,new_sid,config,update)
+                status.update(label='Clips listos',state='complete')
+            st.session_state['pending_project']=new_sid
+            st.session_state['pending_mode']='Proyecto actual'
+            st.session_state['pending_workflow']='2 · Clips'
+            st.session_state['import_warnings']=report['warnings']
+            st.session_state['import_notice']='Se usó tu rango '+clock(clip_min)+'–'+(clock(clip_max) if clip_max is not None else 'sin máximo')+'. Revisión de todo el tramo terminado.'
+            st.rerun()
+        except Exception as e:
+            if new_sid and mode!='Proyecto actual':
+                st.session_state['pending_project']=new_sid; st.session_state['pending_mode']='Proyecto actual'; st.session_state['pending_error']=str(e); st.rerun()
+            st.error(str(e))
+    if st.session_state.get('pending_error'): st.error(st.session_state.pop('pending_error'))
     if st.session_state.get('import_notice'): st.success(st.session_state.pop('import_notice'))
     for warning in st.session_state.pop('import_warnings',[]): st.warning(warning)
-    st.caption('1. Añade contenido   →   2. Genera clips   →   3. Revisa y edita   →   4. Exporta')
     gpu_controls()
 
 if sid:
     source=store.source(sid); metadata=probe(source['path'])
-    with tabs[1]:
-        st.subheader('Análisis incremental')
-        st.write(f"Duración: {metadata['duration']/60:.1f} min · {metadata['width']} × {metadata['height']}")
-        a,b,c=st.columns(3)
-        model=a.selectbox('Modelo Whisper',['tiny','base','small','medium'],index=2,format_func=lambda m:{'tiny':'Tiny · más rápido','base':'Base · ligero','small':'Small · equilibrado','medium':'Medium · más lento'}[m])
-        device=b.selectbox('Procesador',['auto','cpu','cuda'])
-        st.caption('Auto usa la GPU si funciona. Si falta una biblioteca o falla CUDA, se continúa en CPU automáticamente y se conserva el progreso.')
-        block=c.number_input('Minutos por bloque',min_value=1,max_value=120,value=50)
-        language=st.selectbox('Idioma',['es','en','auto'])
-        a,b=st.columns(2)
-        min_m=a.number_input('Duración mínima propuesta (min)',min_value=.1,value=.5,step=.5)
-        target_m=b.number_input('Duración orientativa propuesta (min)',min_value=.1,value=3.,step=.5)
-        unlimited=st.checkbox('Sin máximo de duración por clip',value=True)
-        max_m=None if unlimited else st.number_input('Duración máxima propuesta (min)',min_value=min_m,value=max(5.,min_m),step=.5)
-        fast_profile=st.radio('Análisis visual',['Rápido','Detallado'],horizontal=True)
-        st.caption('Rápido usa muestras de fotogramas clave y deja la detección de rostros para el editor. Detallado usa muestras más frecuentes.')
-        use_ollama=st.checkbox('Clasificar con Ollama local (opcional)')
-        ollama_model=st.text_input('Modelo Ollama',value='qwen3:4b')
-        st.caption('Whisper se descarga y libera antes de usar Ollama. Detén otros modelos GPU para conservar VRAM. Ollama no recibe imágenes; recibe transcripción.')
-        max_blocks=st.number_input('Bloques por revisión (0 = todos)',min_value=0,max_value=100,value=0)
-        if st.button('Analizar minutos pendientes',type='primary'):
-            progress=st.progress(0.); status=st.empty()
-            def update(f,m): progress.progress(min(1.,max(0.,f))); status.info(m)
-            try:
-                report=analyze(store,sid,Analysis(block_minutes=block,model=model,device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=min_m*60,max_seconds=None if max_m is None else max_m*60,target_seconds=target_m*60,visual_step=6 if fast_profile=='Rápido' else 2,visual_fast=fast_profile=='Rápido'),update,max_blocks=max_blocks or None)
-                st.success(f"Completado: {report['blocks']} bloques nuevos en {report['elapsed_seconds']:.1f} s. RAM muestreada: {report['rss_sampled_mb']:.0f} MB.")
-                st.caption('Procesador de la transcripción: '+', '.join(report.get('devices',[]) or ['sin bloques nuevos']))
-                if report.get('transcriptions_reused'): st.info(f"Se reutilizaron {report['transcriptions_reused']} bloques de transcripción. No fue necesario volver a procesarlos con Whisper.")
-                for warning in report['warnings']: st.warning(warning)
-            except Exception as e: st.error(str(e))
-        st.caption('La reanudación usa la misma fuente y configuración. Un cambio de configuración permite reanálisis; los candidatos solapados existentes se conservan. Los bloques no cortan ni modifican el original.')
     candidates=store.candidates(sid)
-    with tabs[2]:
+    with tabs[1]:
         st.subheader('Tus clips, listos para revisar')
         a,b,c=st.columns(3)
         a.metric('Clips propuestos',len(candidates))
@@ -273,7 +389,14 @@ if sid:
         threshold=a.slider('Puntuación mínima',0,100,0)
         states=b.multiselect('Estados',['pendiente','aceptado','descartado'],default=['pendiente','aceptado'])
         order=c.selectbox('Ordenar por',['Puntuación','Inicio'])
-        items=[x for x in candidates if x['score']>=threshold and x['state'] in states]
+        active=store.settings(sid)
+        low,high=active.get('clip_min',0),active.get('clip_max')
+        if active: st.caption('Resultados del rango '+clock(low)+'–'+(clock(high) if high is not None else 'sin máximo'))
+        show_other=st.checkbox('Mostrar clips de otras configuraciones',value=False)
+        def in_range(item):
+            duration=item['end']-item['start']
+            return duration>=low-.01 and (high is None or duration<=high+.01) and item['start']>=active.get('local_start',0)-.01 and (active.get('local_end') is None or item['end']<=active['local_end']+.01)
+        items=[x for x in candidates if x['score']>=threshold and x['state'] in states and (show_other or in_range(x))]
         items.sort(key=lambda x:-x['score'] if order=='Puntuación' else x['start'])
         grid=st.columns(2)
         for index,item in enumerate(items):
@@ -284,7 +407,7 @@ if sid:
                     st.caption(f"{item['start']/60:.2f}–{item['end']/60:.2f} min · {(item['end']-item['start'])/60:.2f} min de duración · {item['state']}")
                     st.write(item['reason'])
                     if st.button('Ver clip',key='view_button_'+item['id']): st.session_state['view_open_'+item['id']]=True
-                    if tabs[2].open and st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
+                    if tabs[1].open and st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
                     st.button('Elegir y editar',key='edit_'+item['id'],on_click=choose_clip,args=(sid,item['id']))
                     a,b=st.columns(2)
                     if a.button('Aceptar',key='accept'+item['id']): store.update(item['id'],state='aceptado'); st.rerun()
@@ -292,170 +415,211 @@ if sid:
                     with st.expander('Por qué se propuso este clip'):
                         st.write('Gancho sugerido:',item.get('hook',''))
                         st.caption(f"Método: {item['classification']} · muestras visuales: {item['visual_samples']}")
-        if not candidates: st.info('Analiza el video para generar propuestas. No se fuerza un número fijo de clips.')
-    if tabs[3].open:
-        with tabs[3]:
+        if not items: st.info('No hay clips de este rango todavía. Vuelve a Fuente y ajustes y pulsa Generar clips. Los clips guardados de otros rangos se conservan.')
+    if tabs[2].open:
+        with tabs[2]:
             from dataclasses import asdict,replace
-            from cliplivre.composition import default_panels,guide
-            from cliplivre.media import frame
-            st.subheader('Configura tu clip en vertical')
+            from cliplivre.composition import default_panels,validate_panel
+            from cliplivre.controls import parse_clock,clock
+            from cliplivre.crop_widget import crop_editor
+            from cliplivre.playback import media_server
+            import base64
+            st.subheader('Editar y exportar')
             eligible=[c for c in candidates if c['state']!='descartado']
             if eligible:
                 cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=lambda k:next(c['title'] for c in eligible if c['id']==k),key='editor_clip_'+sid)
-                item=next(c for c in eligible if c['id']==cid)
-                a,b=st.columns(2)
-                start_m=a.number_input('Inicio del clip (min)',min_value=0.,max_value=metadata['duration']/60,value=float(item['start'])/60,step=.1,format='%.3f',key='start_min_'+cid)
-                end_m=b.number_input('Final del clip (min)',min_value=0.,max_value=metadata['duration']/60,value=float(item['end'])/60,step=.1,format='%.3f',key='end_min_'+cid)
-                start,end=start_m*60,end_m*60
-                title=st.text_input('Título del clip',value=item['title'],key='title'+cid)
-                st.caption(f'Duración seleccionada: {max(0,end-start)/60:.2f} min. Puedes ampliar el intervalo dentro de todo el material analizado.')
-                if end<=start:
-                    st.error('El final debe ser posterior al inicio.'); st.stop()
-                if st.button('Reproducir original horizontal',key='original_'+cid): st.session_state['original_open_'+cid]=True
-                if st.session_state.get('original_open_'+cid): show_clip(source['path'],start,end)
-                stamp=db_stamp()
-                all_words,audio_context=clip_context(str(store.db),sid,start,end,stamp)
+                item=next(c for c in eligible if c['id']==cid); saved=item.get('edit_settings',{})
+                with st.container(border=True):
+                    st.caption('POSICIÓN DEL RECORTE')
+                    preset_options=['Vertical','Dúo','Tres cuadros','Foto + clip']
+                    layout=st.radio('Diseño',preset_options,index=preset_options.index(item.get('layout','Vertical')),horizontal=True,key='layout_'+cid,on_change=set_layout,args=(cid,))
+                    a,b,c=st.columns([2,1,1]); count_key='panel_count_'+cid
+                    expected_count={'Vertical':1,'Dúo':2,'Tres cuadros':3,'Foto + clip':2}[layout]
+                    n=a.selectbox('Número de cuadros',[1,2,3],index=expected_count-1,key=count_key,on_change=count_layout_changed,args=(cid,))
+                    b.button('Añadir cuadro',disabled=n==3,on_click=change_panel_count,args=(cid,1),key='add_'+cid)
+                    c.button('Quitar último cuadro',disabled=n==1,on_click=change_panel_count,args=(cid,-1),key='remove_'+cid)
+                    aspect=st.selectbox('Formato',['9:16','1:1','16:9'],index=['9:16','1:1','16:9'].index(saved.get('aspect','9:16')))
+                    crop_area=st.container()
+                with st.container(border=True):
+                    st.caption('INTERVALO DEL CLIP')
+                    a,b=st.columns(2)
+                    start_text=a.text_input('Inicio (min:seg)',value=precise_clock(item['start']),key='edit_start_'+cid)
+                    end_text=b.text_input('Fin (min:seg)',value=precise_clock(item['end']),key='edit_end_'+cid)
+                    try:
+                        start=parse_clock(start_text); end=parse_clock(end_text)
+                        if not 0<=start<end<=metadata['duration']+.01: raise ValueError('El intervalo debe quedar dentro del video.')
+                    except ValueError as e: st.error(str(e)); st.stop()
+                    timeline_key=f'timeline_{cid}_{start}_{end}'
+                    st.slider('Barra de inicio y fin (min)',min_value=0.,max_value=float(metadata['duration']/60),value=(start/60,end/60),step=.001,key=timeline_key,on_change=sync_clip_timeline,args=(timeline_key,cid))
+                    st.caption('Duración: '+clock(end-start)+' · el video original no se modifica.')
+                    actual_source=store.settings(sid); configured_min=actual_source.get('clip_min',0); configured_max=actual_source.get('clip_max')
+                    if end-start<configured_min-.01 or (configured_max is not None and end-start>configured_max+.01):
+                        st.warning('Este cambio manual queda fuera del rango usado para generar. Puedes ajustarlo o conservarlo como edición manual.')
+                all_words,audio_context=clip_context(str(store.db),sid,start,end,db_stamp())
                 words=[dict(word,start=max(start,word['start']),end=min(end,word['end'])) for word in item.get('edited_words',all_words) if word['start']<end and word['end']>start]
-                with st.expander('Corregir palabras y sincronización'):
-                    st.caption('Ajuste fino: las marcas de palabra usan segundos para sincronizar el audio. La duración del clip se configura arriba en minutos.')
-                    edited=st.data_editor(words or [{'start':float(start),'end':float(min(end,start+1)),'text':''}],num_rows='dynamic',key='words'+cid,width='stretch')
-                saved=item.get('edit_settings',{})
-                template=st.selectbox('Plantilla',['Limpia','Dinámica','Gameplay + cámara'])
-                a,b,c=st.columns(3)
-                aspect=a.selectbox('Formato',['9:16','1:1','16:9'],index=['9:16','1:1','16:9'].index(saved.get('aspect','9:16')))
-                resolution=b.selectbox('Resolución base',[1080,720,360],index=[1080,720,360].index(saved.get('resolution',1080)))
-                framing=c.selectbox('Encuadre',['paneles','ajustar','centro','rostros','streamer'],format_func=lambda x:{'paneles':'Cuadros editables','ajustar':'Video completo con bandas','centro':'Recortar al centro','rostros':'Seguir rostros','streamer':'Gameplay + cámara'}[x],index=['paneles','ajustar','centro','rostros','streamer'].index(saved.get('framing','streamer' if template=='Gameplay + cámara' else 'paneles')))
-                panels=None; roi=None; cx=.5; cy=.5
-                if framing=='paneles':
-                    count_key='panel_count_'+cid
-                    a,b,c=st.columns([2,1,1])
-                    n=a.selectbox('Número de cuadros',[1,2,3],index=max(0,min(2,len(saved.get('panels') or [1])-1)),key=count_key)
-                    b.button('Añadir cuadro',disabled=n==3,on_click=resize_panel_count,args=(count_key,1),key='add_'+cid)
-                    c.button('Quitar último cuadro',disabled=n==1,on_click=resize_panel_count,args=(count_key,-1),key='remove_'+cid)
-                    saved_arrangement=item.get('editor_arrangement','Arriba / abajo')
-                    arrangement=st.radio('Distribución inicial',['Arriba / abajo','Lado a lado'],index=1 if saved_arrangement=='Lado a lado' else 0,horizontal=True,key='arrangement_'+cid)
-                    defaults=default_panels(n,arrangement=='Lado a lado')
-                    old_panels=saved.get('panels') or []
-                    panels=[]
-                    for i,default in enumerate(defaults):
-                        initial_source=old_panels[i]['source'] if i<len(old_panels) else default['source']
-                        initial_destination=old_panels[i]['destination'] if i<len(old_panels) and n==len(old_panels) and arrangement==saved_arrangement else default['destination']
-                        with st.expander(f'Cuadro {i+1}: recortar, mover y cambiar tamaño',expanded=n==1):
-                            st.write('Zona del video original que quieres mostrar')
-                            cols=st.columns(4)
-                            values=[cols[j].number_input(label,min_value=0. if j<2 else 1.,max_value=99. if j<2 else 100.,value=float(initial_source[j]*100),step=1.,key=f'src_{cid}_{i}_{j}')/100 for j,label in enumerate(['Izquierda (%)','Arriba (%)','Ancho (%)','Alto (%)'])]
-                            x,y,pw,ph=values; source_roi=[x,y,min(pw,1-x),min(ph,1-y)]
-                            st.write('Posición y tamaño dentro del lienzo de salida')
-                            cols=st.columns(4)
-                            dest_values=[cols[j].number_input(label,min_value=0. if j<2 else 1.,max_value=99. if j<2 else 100.,value=float(initial_destination[j]*100),step=1.,key=f'dst_{cid}_{n}_{arrangement}_{i}_{j}')/100 for j,label in enumerate(['X del cuadro (%)','Y del cuadro (%)','Ancho del cuadro (%)','Alto del cuadro (%)'])]
-                            dx,dy,dw,dh=dest_values; dest_roi=[dx,dy,min(dw,1-dx),min(dh,1-dy)]
-                            fit=st.selectbox('Contenido del cuadro',['cover','contain'],format_func=lambda f:'Llenar y recortar' if f=='cover' else 'Mostrar todo con bandas',index=1 if i<len(old_panels) and old_panels[i].get('fit')=='contain' else 0,key=f'fit_{cid}_{i}')
-                            panels.append(dict(source=source_roi,destination=dest_roi,fit=fit))
-                else:
+                composition_key=f'composition_{cid}_{layout}_{n}_{aspect}'
+                if composition_key not in st.session_state:
+                    panels=default_panels(n)
+                    if layout=='Foto + clip' and n==2: panels[0]['kind']='image'
+                    for panel in panels:
+                        d=panel['destination']; output_ratio=({'9:16':9/16,'1:1':1,'16:9':16/9}[aspect])*d[2]/d[3]
+                        source_ratio=metadata['width']/metadata['height']
+                        rw=min(1.,output_ratio/source_ratio); rh=min(1.,source_ratio/output_ratio)
+                        panel['source']=[(1-rw)/2,(1-rh)/2,rw,rh]
+                        if panel.get('kind')=='image': panel['source']=[0,0,1,1]; panel['fit']='contain'
+                    if item.get('layout','Vertical')==layout and saved.get('panels') and len(saved['panels'])==n: panels=saved['panels']
+                    st.session_state[composition_key]=panels
+                panels=st.session_state[composition_key]
+                photo_path=st.session_state.get('photo_'+cid,saved.get('photo_path'))
+                logo_path=st.session_state.get('logo_'+cid,saved.get('logo_path'))
+                if layout=='Foto + clip':
+                    photo=st.file_uploader('Foto para el cuadro superior',type=['png','jpg','jpeg','webp'],key='photo_upload_'+cid)
+                    if photo:
+                        photo_path=save_image(photo); st.session_state['photo_'+cid]=photo_path
+                    if not photo_path: st.info('Añade una foto para activar Foto + clip.')
+                with st.container(border=True):
+                    st.caption('TÍTULOS')
+                    title=st.text_input('Nombre del clip',value=item['title'],key='title_'+cid)
+                    titles_key='titles_'+cid
+                    if titles_key not in st.session_state:
+                        initial=saved.get('titles') or []
+                        if not initial and saved.get('overlay_text'): initial=[dict(id=uuid.uuid4().hex,text=saved['overlay_text'],start=0.,end=end-start,x=saved.get('overlay_x',.5),y=saved.get('overlay_y',.15),size=saved.get('overlay_size',64),color='#'+saved.get('overlay_color','FFFFFF'))]
+                        st.session_state[titles_key]=initial
                     a,b=st.columns(2)
-                    cx=a.slider('Centro horizontal',0.,1.,.5); cy=b.slider('Centro vertical',0.,1.,.5)
+                    a.button('＋ Añadir título',on_click=add_title,args=(titles_key,end-start),key='add_title_'+cid)
+                    b.button('Quitar último título',disabled=not st.session_state[titles_key],on_click=remove_title,args=(titles_key,),key='remove_title_'+cid)
+                    titles=[]
+                    for i,track in enumerate(st.session_state[titles_key]):
+                        tid=track.get('id',str(i))
+                        with st.expander(f'Título {i+1}',expanded=True):
+                            text=st.text_input('Texto',value=track.get('text',''),key='tt_'+tid)
+                            a,b=st.columns(2)
+                            begin=parse_clock(a.text_input('Desde (min:seg)',value=precise_clock(track.get('start',0)),key='ts_'+tid))
+                            finish=parse_clock(b.text_input('Hasta (min:seg)',value=precise_clock(min(end-start,track.get('end',end-start))),key='te_'+tid))
+                            a,b,c=st.columns(3)
+                            tx=a.slider('Horizontal (%)',0,100,round(track.get('x',.5)*100),key='tx_'+tid)/100
+                            ty=b.slider('Vertical (%)',0,100,round(track.get('y',.15)*100),key='ty_'+tid)/100
+                            size=c.slider('Tamaño',24,120,int(track.get('size',64)),key='tz_'+tid)
+                            color=st.color_picker('Color',value=track.get('color','#FFFFFF'),key='tc_'+tid)
+                            st.button('Duplicar título',on_click=duplicate_title,args=(titles_key,i),key='duplicate_'+tid)
+                            titles.append(dict(id=tid,text=text,start=begin,end=finish,x=tx,y=ty,size=size,color=color))
+                    st.session_state[titles_key]=titles
+                with st.expander('Logo del canal'):
+                    logo=st.file_uploader('Añadir logo',type=['png','jpg','jpeg','webp'],key='logo_upload_'+cid+str(st.session_state.get('logo_revision_'+cid,0)))
+                    if logo:
+                        logo_path=save_image(logo); st.session_state['logo_'+cid]=logo_path
+                    if logo_path:
+                        st.image(logo_path,width=80)
+                        st.button('Quitar logo',on_click=clear_logo,args=(cid,),key='clear_logo_'+cid)
+                with st.container(border=True):
+                    st.caption('SUBTÍTULOS AUTOMÁTICOS')
+                    if st.session_state.pop('pending_burn_'+cid,False): st.session_state['burn_'+cid]=True
+                    burn=st.checkbox('Mostrar subtítulos',value=saved.get('burn',True),key='burn_'+cid)
+                    if st.button('Generar / actualizar subtítulos',key='generate_subs_'+cid):
+                        try:
+                            if not words:
+                                from cliplivre.media import audio
+                                from cliplivre.transcribe import transcribe
+                                with st.spinner('Transcribiendo solo este clip…'):
+                                    segments,meta=transcribe(audio(source['path'],start,end-start),'tiny','auto',None if actual_source.get('language')=='auto' else actual_source.get('language','es'))
+                                words=[dict(w,start=w['start']+start,end=w['end']+start) for segment in segments for w in segment.get('words',[])]
+                            if words:
+                                item['edited_words']=words; store.update(cid,payload=item)
+                                st.session_state['pending_burn_'+cid]=True; st.rerun()
+                            else: st.info('No se detectaron palabras. Puedes escribirlas en Corregir texto.')
+                        except Exception as e: st.error(str(e))
+                    a,b,c=st.columns(3)
+                    font=a.selectbox('Fuente',['Arial','Verdana','DejaVu Sans'],index=['Arial','Verdana','DejaVu Sans'].index(saved.get('font','Arial')))
+                    sub_color=b.color_picker('Color de palabra activa','#'+saved.get('color','FFFF00'))
+                    position=c.selectbox('Posición de subtítulos',['Abajo','Centro','Arriba'],index={2:0,5:1,8:2}[saved.get('subtitle_position',2)])
+                    sub_size=st.slider('Tamaño de subtítulos',24,90,saved.get('font_size',54))
+                    animated=st.checkbox('Animar subtítulos',value=saved.get('animated',True))
+                    with st.expander('Corregir texto y sincronización fina'):
+                        st.caption('Marcas de palabra en segundos; los intervalos principales usan min:seg.')
+                        edited=st.data_editor(words or [dict(start=start,end=min(end,start+1),text='')],num_rows='dynamic',key='words_'+cid,width='stretch')
+                with st.expander('Más ajustes de encuadre y efectos'):
+                    resolution=st.selectbox('Resolución base',[1080,720,360],index=[1080,720,360].index(saved.get('resolution',1080)))
+                    framing=st.selectbox('Encuadre',['paneles','ajustar','centro','rostros','streamer'],format_func=lambda f:{'paneles':'Cuadros arrastrables','ajustar':'Todo con bandas','centro':'Recortar al centro','rostros':'Seguimiento aproximado de rostros','streamer':'Gameplay + cámara'}[f])
+                    cx=st.slider('Centro horizontal',0.,1.,.5); cy=st.slider('Centro vertical',0.,1.,.5)
+                    roi=None
                     if framing=='streamer':
-                        from cliplivre.signals import visual_features
-                        if st.button('Sugerir región de cámara por rostros'):
-                            frames=visual_features(source['path'],start,min(end,start+10),1.)
-                            boxes=[r for f in frames for r in f['faces'] if (r[0]<.3 or r[0]>.65) and (r[1]<.3 or r[1]>.6)]
-                            if boxes:
-                                x,y,pw,ph=boxes[0]; x=max(0,x-pw); y=max(0,y-ph*.5)
-                                st.session_state['roi'+cid]=(x,y,min(1-x,pw*3),min(1-y,ph*2.5))
-                            else: st.warning('No se encontró un rostro en una esquina. Puedes definir la cámara manualmente.')
-                        defaults=st.session_state.get('roi'+cid,(0.,0.,.25,.3)); cols=st.columns(4)
-                        roi=tuple(cols[i].number_input(label,0.,1.,float(defaults[i]),.01,key=f'roi{cid}{i}{defaults}') for i,label in enumerate(['X cámara','Y cámara','Ancho cámara','Alto cámara']))
-                with st.expander('Añadir texto propio',expanded=bool(saved.get('overlay_text'))):
-                    overlay_text=st.text_area('Texto sobre el video',value=saved.get('overlay_text',''),max_chars=2000,key='overlay_'+cid)
-                    a,b=st.columns(2)
-                    text_color=a.color_picker('Color del texto',value='#'+saved.get('overlay_color','FFFFFF'),key='text_color_'+cid)
-                    text_size=b.slider('Tamaño del texto',24,120,int(saved.get('overlay_size',64)),key='text_size_'+cid)
-                    a,b=st.columns(2)
-                    text_x=a.slider('Posición horizontal del texto (%)',0,100,round(saved.get('overlay_x',.5)*100),key='text_x_'+cid)/100
-                    text_y=b.slider('Posición vertical del texto (%)',0,100,round(saved.get('overlay_y',.15)*100),key='text_y_'+cid)/100
-                burn=st.checkbox('Incrustar subtítulos',value=saved.get('burn',True))
-                animated=st.checkbox('Animar subtítulos',value=saved.get('animated',template=='Dinámica'))
-                a,b,c=st.columns(3)
-                font=a.selectbox('Fuente',['Arial','Verdana','DejaVu Sans'],index=['Arial','Verdana','DejaVu Sans'].index(saved.get('font','Arial')))
-                color=b.color_picker('Color de palabra activa','#'+saved.get('color','FFFF00'))
-                position=c.selectbox('Posición de subtítulos',['Abajo','Centro','Arriba'],index={2:0,5:1,8:2}[saved.get('subtitle_position',2)])
-                size=st.slider('Tamaño de subtítulos',24,90,saved.get('font_size',54))
-                with st.expander('Zoom, silencios y efectos'):
-                    zoom=st.slider('Zoom suave máximo',1.,1.2,1.08 if template=='Dinámica' else 1.,.01)
-                    fade=st.checkbox('Fundidos de entrada y salida',value=template=='Dinámica')
-                    reduce=st.checkbox('Reducir silencios (revisar contexto)')
-                edit=Edit(aspect=aspect,resolution=resolution,framing=framing,center_x=cx,center_y=cy,zoom=zoom,fade=fade,burn=burn,animated=animated,font=font,font_size=size,color=color.lstrip('#'),subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],streamer_roi=roi,panels=panels,overlay_text=overlay_text,overlay_size=text_size,overlay_color=text_color.lstrip('#'),overlay_x=text_x,overlay_y=text_y)
-                st.subheader('Encuadre: vista inmediata')
-                try:
+                        cols=st.columns(4)
+                        roi=tuple(cols[i].number_input(label,0.,1.,float(v),.01,key=f'roi_{cid}_{i}') for i,(label,v) in enumerate(zip(['X cámara','Y cámara','Ancho cámara','Alto cámara'],[0.,0.,.25,.3])))
+                    numeric=st.checkbox('Ajustar cuadros por números',value=False)
+                    if numeric:
+                        for i,panel in enumerate(panels):
+                            with st.expander(f'Cuadro {i+1}: números'):
+                                for field in ['source','destination']:
+                                    cols=st.columns(4); vals=[]
+                                    for j,label in enumerate(['X','Y','Ancho','Alto']):
+                                        vals.append(cols[j].number_input(field+' '+label,0. if j<2 else .01,.99 if j<2 else 1.,float(panel[field][j]),.01,key=f'num_{composition_key}_{field}_{i}_{j}') )
+                                    x,y,w,h=vals; panel[field]=[x,y,min(w,1-x),min(h,1-y)]
+                    zoom=st.slider('Zoom suave máximo',1.,1.2,float(saved.get('zoom',1.)),.01)
+                    fade=st.checkbox('Fundidos de entrada y salida',value=saved.get('fade',False))
+                    reduce=st.checkbox('Reducir silencios (revisar contexto)',value=False)
+                with crop_area:
                     from cliplivre.render import dimensions
-                    w,h=dimensions(aspect,360)
                     source_image=cached_frame(source['path'],min(start+.2,end-.01),Path(source['path']).stat().st_mtime_ns)
-                    guide_panels=panels
-                    if not guide_panels:
-                        guide_panels=default_panels(1); guide_panels[0]['fit']='contain' if framing=='ajustar' else 'cover'
-                        if framing=='streamer' and roi:
-                            guide_panels=[dict(source=list(roi),destination=[0,0,1,1/3],fit='cover'),dict(source=[0,0,1,1],destination=[0,1/3,1,2/3],fit='contain')]
-                        elif framing in {'centro','rostros'}:
-                            ratio=metadata['width']/metadata['height']; output_ratio=w/h
-                            rw=min(1.,output_ratio/ratio); rh=min(1.,ratio/output_ratio)
-                            guide_panels[0]['source']=[(1-rw)*cx,(1-rh)*cy,rw,rh]
-                    picture=guide(source_image,guide_panels,w,h,overlay_text,text_x,text_y,text_color.lstrip('#'),text_size)
-                    st.image(picture,width=min(400,w))
-                    st.caption('Guía estática rápida de cuadros y texto. Para comprobar subtítulos sincronizados, seguimiento, zoom y animaciones, genera la vista previa editada.')
-                except Exception as e: st.error('No se pudo mostrar la guía: '+str(e))
-                if st.button('Guardar revisión y configuración'):
+                    def image_data(path): return 'data:image/png;base64,'+base64.b64encode(Path(path).read_bytes()).decode() if path and Path(path).is_file() else None
+                    revision_key='crop_revision_'+composition_key
+                    crop=crop_editor(source_image,panels,aspect,video_url=media_server().url(source['path']),start=start,end=end,words=words,burn=burn,subtitle_color=sub_color,subtitle_size=sub_size,subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],revision=st.session_state.get(revision_key,0),photo=image_data(photo_path) if layout=='Foto + clip' else None,logo=image_data(logo_path),titles=titles,key='crop_'+composition_key)
+                    if crop and crop.get('revision',0)>st.session_state.get(revision_key,0):
+                        new_panels=crop.get('panels',[])
+                        if len(new_panels)==n:
+                            for panel in new_panels: validate_panel(panel)
+                            panels=new_panels; st.session_state[composition_key]=panels; st.session_state[revision_key]=crop['revision']
+                    st.caption('Vista interactiva inmediata. Para comprobar cortes, animación y el resultado exacto, usa Vista previa editada.')
+                edit=Edit(aspect=aspect,resolution=resolution,framing=framing,center_x=cx,center_y=cy,zoom=zoom,fade=fade,burn=burn,animated=animated,font=font,font_size=sub_size,color=sub_color.lstrip('#'),subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],streamer_roi=roi,panels=panels,photo_path=photo_path if layout=='Foto + clip' else None,logo_path=logo_path,titles=titles)
+                missing_photo=layout=='Foto + clip' and not photo_path
+                if st.button('Guardar revisión y configuración',disabled=missing_photo):
                     try:
                         checked=[]
                         for word in edited:
                             if word['text']:
-                                if not start<=float(word['start'])<float(word['end'])<=end: raise ValueError('Cada palabra debe estar dentro del clip.')
+                                if not start<=float(word['start'])<float(word['end'])<=end: raise ValueError('La palabra debe quedar dentro del clip.')
                                 checked.append(dict(start=float(word['start']),end=float(word['end']),text=str(word['text'])))
-                        item.update(start=start,end=end,title=title,edited_words=checked,edit_settings=asdict(edit),editor_arrangement=arrangement if framing=='paneles' else 'Arriba / abajo')
-                        store.update(cid,payload=item); st.success('Clip y configuración guardados.')
+                        item.update(start=start,end=end,title=title,edited_words=checked,edit_settings=asdict(edit),layout=layout)
+                        store.update(cid,payload=item); st.success('Guardado.')
                     except Exception as e: st.error(str(e))
                 status=st.empty()
                 def make(candidate,settings,preview_mode=False):
-                    selected_words=candidate.get('edited_words')
-                    if selected_words is None: selected_words=all_words
+                    selected_words=candidate.get('edited_words',words)
                     candidate_audio=clip_context(str(store.db),sid,candidate['start'],candidate['end'],db_stamp())[1] if reduce else []
                     cuts=silent_intervals(candidate_audio,candidate['start'],candidate['end']) if reduce else []
                     fingerprint=hashlib.sha256(json.dumps(dict(source=sid,start=candidate['start'],end=candidate['end'],words=selected_words,edit=asdict(settings),cuts=cuts),sort_keys=True).encode()).hexdigest()
-                    manifest=ROOT/'vistas_previas'/('edited_'+fingerprint+'.json')
-                    manifest.parent.mkdir(exist_ok=True)
+                    manifest=ROOT/'vistas_previas'/('edited_'+fingerprint+'.json'); manifest.parent.mkdir(exist_ok=True)
                     if preview_mode and manifest.exists():
-                        saved_output=Path(json.loads(manifest.read_text())['path'])
-                        if saved_output.exists(): return saved_output
-                    result=render(source['path'],candidate['start'],candidate['end'],selected_words,ROOT/'editados',settings,cuts,lambda m:status.info(m))
-                    if preview_mode: manifest.write_text(json.dumps(dict(path=str(result))))
-                    return result
-                if st.button('Generar vista previa editada'):
+                        output=Path(json.loads(manifest.read_text())['path'])
+                        if output.exists(): return output
+                    output=render(source['path'],candidate['start'],candidate['end'],selected_words,ROOT/'editados',settings,cuts,lambda m:status.info(m))
+                    if preview_mode: manifest.write_text(json.dumps(dict(path=str(output))))
+                    return output
+                if st.button('Generar vista previa editada',disabled=missing_photo):
                     try:
-                        with st.spinner('Renderizando solo el intervalo elegido…'):
+                        with st.spinner('Generando el resultado exacto del clip…'):
                             result=make(dict(item,start=start,end=end,edited_words=list(edited)),replace(edit,resolution=360,preset='ultrafast'),True)
                         st.session_state['preview'+cid]=str(result)
                     except Exception as e: st.error(str(e))
-                if st.session_state.get('preview'+cid): st.video(st.session_state['preview'+cid])
-                st.caption('La vista previa en video incluye los efectos reales y se reutiliza si no cambias los ajustes.')
-                if st.button('Exportar clip con estos ajustes',type='primary'):
+                if st.session_state.get('preview'+cid): direct_player(st.session_state['preview'+cid])
+                if st.button('Exportar clip con estos ajustes',type='primary',disabled=missing_photo,width='stretch'):
                     try:
-                        with st.spinner('Exportando el clip configurado…'): result=make(dict(item,start=start,end=end,edited_words=list(edited)),edit)
+                        with st.spinner('Exportando…'): result=make(dict(item,start=start,end=end,edited_words=list(edited)),edit)
                         store.export(cid,result,asdict(edit)); st.session_state['export'+cid]=str(result)
                     except Exception as e: st.error(str(e))
                 if st.session_state.get('export'+cid):
-                    result=Path(st.session_state['export'+cid]); st.success(str(result)); st.video(str(result))
-                    for name in ['editado.mp4','subtitulos.srt','subtitulos.ass','texto.ass','edicion.json']:
+                    result=Path(st.session_state['export'+cid]); st.success(str(result)); direct_player(str(result))
+                    for name in ['editado.mp4','subtitulos.srt','subtitulos.ass','texto.ass','titulos.ass','edicion.json']:
                         p=result.parent/name
                         if p.exists(): st.download_button('Descargar '+name,p.read_bytes(),file_name=name,key=str(p))
                 accepted=[c for c in eligible if c['state']=='aceptado']
-                st.caption('Lote: aplica estos ajustes a los clips aceptados. Las palabras guardadas se conservan.')
-                if st.button(f'Exportar lote de {len(accepted)} clips aceptados',disabled=not accepted):
+                if st.button(f'Exportar lote de {len(accepted)} clips aceptados',disabled=not accepted or missing_photo):
                     for candidate in accepted:
                         try:
                             batch_words,_=clip_context(str(store.db),sid,candidate['start'],candidate['end'],db_stamp())
                             result=make(dict(candidate,edited_words=candidate.get('edited_words',batch_words)),edit)
                             store.export(candidate['id'],result,asdict(edit)); st.success(str(result))
-                        except Exception as e: st.error(f"{candidate['title']}: {e}")
-            else: st.info('Elige un clip en Mis clips para configurarlo.')
+                        except Exception as e: st.error(str(e))
+            else: st.info('Elige un clip en Clips para editarlo.')
 
 else:
     for tab in tabs[1:]:

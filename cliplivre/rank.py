@@ -5,7 +5,7 @@ import requests
 
 KEYWORDS = ('increíble','mira','qué','wow','no puede','jaj','sorpresa','cuidado','ganamos','perdimos','policía','persecución')
 
-def propose(segments, audio, visual, start, end, limit=20, min_seconds=30, max_seconds=None,target_seconds=180):
+def propose(segments, audio, visual, start, end, limit=20, min_seconds=30, max_seconds=None,target_seconds=180,vary=False):
     segments=sorted(segments,key=lambda s:s['start'])
     audio=sorted(audio,key=lambda f:f['time']); visual=sorted(visual,key=lambda f:f['time'])
     segment_times=[s['start'] for s in segments]
@@ -13,19 +13,30 @@ def propose(segments, audio, visual, start, end, limit=20, min_seconds=30, max_s
     all_words=sorted([w for s in segments for w in s.get('words',[])],key=lambda w:w['start'])
     word_times=[w['start'] for w in all_words]
     pool=[]
-    for index,seg in enumerate(segments):
-        a=max(start,seg['start']-2)
-        target=min(end,a+max(min_seconds,target_seconds))
-        if max_seconds is not None: target=min(target,a+max_seconds)
-        # Cierra en una frase cercana al objetivo; no impone un máximo de 60/180 s.
-        j=bisect_left(segment_times,target,lo=index)
-        b=min(end,max(seg['end']+3,target))
-        if j<len(segments) and segments[j]['start']<=target+20:
-            b=min(end,segments[j]['end']+1)
-        if max_seconds is not None: b=min(b,a+max_seconds)
+    end_times=sorted(s['end'] for s in segments)
+    anchors=[]
+    for index,segment in enumerate(segments):
+        anchors.append((index,segment['start']))
+        if max_seconds is not None and segment['end']-segment['start']>max_seconds:
+            stride=max(min_seconds,(min_seconds+max_seconds)/2)
+            for offset in range(1,int((segment['end']-segment['start'])/stride)+1):
+                anchor=segment['start']+offset*stride
+                if anchor+min_seconds<=segment['end']: anchors.append((index+offset,anchor))
+    for index,anchor in anchors:
+        a=max(start,anchor-2)
+        wanted=target_seconds
+        if vary and max_seconds is not None and max_seconds>min_seconds:
+            fractions=(.2,.65,.4,.85,.3,.55,.75,.1)
+            wanted=min_seconds+(max_seconds-min_seconds)*fractions[index%len(fractions)]
+        upper=min(end,a+max_seconds) if max_seconds is not None else end
+        target=min(upper,a+max(min_seconds,wanted))
+        natural=end_times[bisect_left(end_times,a+min_seconds):bisect_right(end_times,upper)]
+        b=min(natural,key=lambda t:abs(t-target)) if natural and min(abs(t-target) for t in natural)<=20 else target
+        if max_seconds is not None and b-a<min_seconds-.001: continue
         if b-a < min(5,min_seconds): continue
         context=segments[max(0,bisect_left(segment_times,a)-1):bisect_left(segment_times,b)]
-        words=' '.join(s['text'] for s in context if s['end']>a)
+        selected_words=all_words[bisect_left(word_times,a):bisect_left(word_times,b)]
+        words=' '.join(w['text'] for w in selected_words) if selected_words else ' '.join(s['text'] for s in context if s['start']>=a and s['end']<=b)
         features=audio[bisect_left(audio_times,a):bisect_left(audio_times,b)]
         frames=visual[bisect_left(visual_times,a):bisect_left(visual_times,b)]
         energy=max([max(0,(f['db']+45)/45) for f in features],default=0)
@@ -50,6 +61,9 @@ def propose(segments, audio, visual, start, end, limit=20, min_seconds=30, max_s
                 pool.append(dict(start=a,end=b,score=round(30+frame['scene']*30),title='Cambio visual: revisar',hook='',reason='Cambio de distribución visual, sin interpretación semántica.',evidence='',classification='heurística visual',words=[],visual_samples=1))
     chosen=[]
     for item in sorted(pool,key=lambda c:c['score'],reverse=True):
+        if max_seconds is not None:
+            item=dict(item,end=min(item['end'],item['start']+max_seconds))
+            if item['end']-item['start']<min_seconds-.001: continue
         if not any(item['start'] < c['end'] and item['end'] > c['start'] for c in chosen):
             chosen.append(item)
         if len(chosen)>=min(20,limit): break

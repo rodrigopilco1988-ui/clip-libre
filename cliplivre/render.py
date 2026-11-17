@@ -40,6 +40,9 @@ class Edit:
     overlay_color: str = 'FFFFFF'
     overlay_x: float = .5
     overlay_y: float = .15
+    photo_path: str | None = None
+    logo_path: str | None = None
+    titles: list | None = None
 
 
 def retained(start,end,cuts):
@@ -105,14 +108,17 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     if edit.framing=='paneles':
         panels=edit.panels
         if not panels or not 1<=len(panels)<=3: raise ValueError('Elige entre uno y tres cuadros.')
-        graph.append(frame+f'split={len(panels)+1}[canvas_source]'+''.join(f'[panel{i}]' for i in range(len(panels))))
+        video_panels=[i for i,p in enumerate(panels) if p.get('kind')!='image']
+        graph.append(frame+f'split={len(video_panels)+1}[canvas_source]'+''.join(f'[panel{i}]' for i in video_panels))
         graph.append(f'[canvas_source]scale={w}:{h},drawbox=color=black:t=fill,setsar=1[canvas0]')
         for i,panel in enumerate(panels):
             validate_panel(panel)
             sx,sy,sw,sh=panel['source']; dx,dy,dw,dh=geometry(panel,w,h)
             if panel.get('fit','cover')=='cover': fit=f'scale={dw}:{dh}:force_original_aspect_ratio=increase,crop={dw}:{dh}'
             else: fit=f'scale={dw}:{dh}:force_original_aspect_ratio=decrease,pad={dw}:{dh}:(ow-iw)/2:(oh-ih)/2'
-            graph.append(f'[panel{i}]crop=iw*{sw}:ih*{sh}:iw*{sx}:ih*{sy},{fit},setsar=1[layer{i}]')
+            panel_input='[1:v]' if panel.get('kind')=='image' else f'[panel{i}]'
+            if panel.get('kind')=='image' and not edit.photo_path: raise ValueError('Añade una foto para Foto + clip.')
+            graph.append(f'{panel_input}crop=iw*{sw}:ih*{sh}:iw*{sx}:ih*{sy},{fit},setsar=1[layer{i}]')
             graph.append(f'[canvas{i}][layer{i}]overlay=x={dx}:y={dy}:shortest=1[canvas{i+1}]')
         graph.append(f'[canvas{len(panels)}]null[framed]')
     elif edit.framing=='streamer':
@@ -145,9 +151,20 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     if edit.overlay_text.strip():
         overlay(edit.overlay_text,target/'texto.ass',duration,w,h,edit.font,round(edit.overlay_size*w/1080),edit.overlay_color,edit.overlay_x,edit.overlay_y)
         filters.append('ass=texto.ass')
-    graph.append('[framed]'+','.join(filters)+'[final]')
+    if edit.titles:
+        from .subtitles import titles_ass
+        titles_ass(edit.titles,target/'titulos.ass',duration,w,h,edit.font)
+        filters.append('ass=titulos.ass')
+    graph.append('[framed]'+','.join(filters)+('[before_logo]' if edit.logo_path else '[final]'))
+    if edit.logo_path:
+        logo_index=2 if edit.photo_path else 1
+        graph.append(f'[{logo_index}:v]scale={max(2,round(w*.17)//2*2)}:-2[logo]')
+        graph.append('[before_logo][logo]overlay=x=W*0.79:y=H*0.03:shortest=1[final]')
     script=target/'filters.txt'; script.write_text(';\n'.join(graph),encoding='utf-8')
-    cmd=['ffmpeg','-v','error','-y','-threads','2','-ss',str(start),'-t',str(end-start),'-i',str(Path(path).resolve()),'-filter_complex_threads','1',filter_file_option(),str(script),'-map','[final]']
+    cmd=['ffmpeg','-v','error','-y','-threads','2','-ss',str(start),'-t',str(end-start),'-i',str(Path(path).resolve())]
+    if edit.photo_path: cmd+=['-loop','1','-i',str(Path(edit.photo_path).resolve())]
+    if edit.logo_path: cmd+=['-loop','1','-i',str(Path(edit.logo_path).resolve())]
+    cmd+=['-filter_complex_threads','1',filter_file_option(),str(script),'-map','[final]']
     if info['audio']: cmd+=['-map','[sound]','-c:a','aac','-b:a','160k']
     cmd+=['-c:v','libx264','-preset',edit.preset,'-crf','20','-pix_fmt','yuv420p','-movflags','+faststart',str(target/'editado.mp4')]
     progress('Codificando video con FFmpeg…')

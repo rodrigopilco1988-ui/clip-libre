@@ -49,3 +49,16 @@ def test_fast_seek_uses_actual_late_interval(tmp_path):
     pixels=np.array(Image.open(BytesIO(frame(output,.2,width=320))).convert('RGB'))
     assert pixels[:,:,2].mean()>200 and pixels[:,:,0].mean()<20
     assert abs(probe(output)['duration']-1)<.2
+
+
+def test_photo_logo_and_timed_titles_render(color_video,tmp_path):
+    photo=tmp_path/'foto.png'; logo=tmp_path/'logo.png'
+    Image.new('RGB',(80,80),'red').save(photo); Image.new('RGBA',(32,32),(0,255,0,255)).save(logo)
+    panels=default_panels(2); panels[0].update(kind='image',source=[0,0,1,1])
+    output=render(color_video,0,2,[],tmp_path/'out',Edit(resolution=360,framing='paneles',panels=panels,photo_path=str(photo),logo_path=str(logo),titles=[dict(text='Primer título',start=0,end=.8,x=.5,y=.7,size=64,color='#FFFFFF'),dict(text='Segundo título',start=1,end=2,x=.5,y=.7,size=64,color='#FFFF00')],preset='ultrafast'))
+    info=probe(output); assert info['audio'] and abs(info['duration']-2)<.2
+    pixels=np.array(Image.open(BytesIO(frame(output,.5,width=360))).convert('RGB'))
+    assert pixels[180,180,0]>180
+    assert pixels[40,310,1]>180 and pixels[40,310,0]<40
+    ass=(output.parent/'titulos.ass').read_text(encoding='utf-8')
+    assert 'Primer título' in ass and 'Segundo título' in ass and '0:00:01.00' in ass

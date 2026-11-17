@@ -89,3 +89,30 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 '''
     event=f'Dialogue: 0,0:00:00.00,{timestamp(duration,True)},Default,,0,0,0,,{{\\pos({round(x*width)},{round(y*height)})}}{escaped}\n'
     path=Path(base); path.write_text(header+event,encoding='utf-8'); return path
+
+
+def titles_ass(titles,path,duration,width,height,font='Arial'):
+    if not font.replace(' ','').replace('-','').isalnum(): raise ValueError('Fuente inválida.')
+    header=f'''[Script Info]
+ScriptType: v4.00+
+PlayResX: {width}
+PlayResY: {height}
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{font},54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,1,5,10,10,10,1
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+'''
+    events=[]
+    for title in titles:
+        start=max(0,float(title['start'])); end=min(duration,float(title['end']))
+        if end<=start or not title['text'].strip(): continue
+        color=title.get('color','#FFFFFF').lstrip('#')
+        if len(color)!=6 or any(c not in '0123456789abcdefABCDEF' for c in color): raise ValueError('Color de título inválido.')
+        x,y=float(title.get('x',.5)),float(title.get('y',.15))
+        if not 0<=x<=1 or not 0<=y<=1: raise ValueError('Posición de título inválida.')
+        size=max(8,min(160,round(float(title.get('size',64))*width/1080)))
+        bgr=color[4:6]+color[2:4]+color[:2]
+        text='\\N'.join(ass_escape(t) for t in title['text'][:2000].splitlines())
+        events.append(f'Dialogue: 1,{timestamp(start,True)},{timestamp(end,True)},Default,,0,0,0,,{{\\pos({round(x*width)},{round(y*height)})\\fs{size}\\1c&H{bgr}&}}{text}')
+    Path(path).write_text(header+'\n'.join(events)+'\n',encoding='utf-8')

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clip-libre"
-version = "0.3.0"
+version = "0.4.0"
 description = "Editor local de clips con IA opcional"
 requires-python = ">=3.11,<3.14"
 license = "MIT"
@@ -18,3 +18,6 @@ include = ["cliplivre*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+cliplivre = ["assets/crop_editor/*"]

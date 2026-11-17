@@ -77,7 +77,7 @@ def test_inspection_and_live_options(tmp_path,monkeypatch):
     from cliplivre import sources
     monkeypatch.setattr(sources,'extract_info',lambda url:dict(title='Canal',is_live=True))
     assert sources.inspect_url('https://www.twitch.tv/canal')['live']
-    with pytest.raises(RuntimeError,match='duración de captura'):
+    with pytest.raises(RuntimeError,match='recuperación histórica'):
         import_url('https://www.twitch.tv/canal',tmp_path,permission=True)
     with pytest.raises(RuntimeError,match='recuperación histórica'):
         import_url('https://www.twitch.tv/canal',tmp_path,0,60,True,live_mode='historial')
