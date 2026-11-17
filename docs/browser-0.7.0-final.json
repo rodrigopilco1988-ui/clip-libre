@@ -1,0 +1,30 @@
+{
+  "layouts": [
+    {
+      "action": "A\u00f1adir cuadro",
+      "count": 2,
+      "seconds": 1.022
+    },
+    {
+      "action": "A\u00f1adir cuadro",
+      "count": 3,
+      "seconds": 0.945
+    },
+    {
+      "action": "Quitar \u00faltimo cuadro",
+      "count": 2,
+      "seconds": 0.414
+    },
+    {
+      "action": "Quitar \u00faltimo cuadro",
+      "count": 1,
+      "seconds": 0.952
+    }
+  ],
+  "editor_preserved": true,
+  "video_url_preserved": true,
+  "edited_download_seconds": 3.627,
+  "edited_panels": 2,
+  "subtitles": false,
+  "javascript_errors": []
+}

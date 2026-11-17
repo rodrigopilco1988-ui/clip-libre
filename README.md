@@ -1,6 +1,16 @@
-# Clip Libre · 0.6.0
+# Clip Libre · 0.7.0
 
 Estudio local para generar, revisar y editar clips. Interfaz original en español, sin créditos, suscripciones ni APIs de IA de pago. Usa únicamente material con acceso y permiso de reutilización.
+
+## Descargar para CapCut y cuadros estables (0.7.0)
+
+- En **Clips**, pulsa **Descargar clip para CapCut · horizontal**. Un solo botón prepara y descarga el tramo elegido, sin subtítulos ni entrada obligatoria al editor. Mantiene la resolución y frecuencia de imagen del archivo importado y conserva su audio, con codificación MP4 compatible; no es copia bit a bit.
+- Si quieres encuadrar antes, pulsa **Elegir y editar**, añade/quita hasta tres cuadros o usa el selector y arrastra cada recorte. Después pulsa **Descargar MP4 editado · sin subtítulos**. Incluye el formato, cuadros, títulos y logo configurados, sin subtítulos automáticos.
+- Ambas descargas se preparan al pulsar, en segundo plano, y se reutilizan si no cambias ajustes. La interfaz sigue disponible. La primera descarga tiene que codificar el clip; no es instantánea ni garantiza un tiempo fijo.
+- El reproductor del editor permanece abierto al cambiar cuadros. Usa una vista previa corta compatible, conservando la fuente original para descargar/exportar. En ediciones manuales de más de dos minutos, la vista interactiva muestra los primeros dos minutos; la descarga mantiene el intervalo completo elegido.
+- Los subtítulos están **apagados por defecto**, incluso al abrir un clip que antes los guardó activados. Se conservan como opción en el apartado cerrado «Subtítulos opcionales · puedes hacerlos en CapCut». No necesitas generarlos para descargar. El botón principal de descarga editada siempre entrega MP4 sin subtítulos automáticos.
+
+Prueba real Chromium: 1 → 2 → 3 → 2 → 1 cuadros, selector directo y ambas descargas. Se mantuvieron el mismo reproductor y la misma URL del video; no hubo errores JavaScript ni excepción Streamlit. Archivos descargados de 69 s con audio: horizontal 640×360 y editado de dos cuadros 1080×1920. Informes en docs/VALIDACION.md.
 
 ## Vista previa corregida y modo Ultrarrápido (0.6.0)
 
@@ -28,8 +38,8 @@ La app muestra las opciones antes de intentar importar: **Abrir videos guardados
 ## Tres pasos
 
 1. **Fuente y ajustes**: pega un enlace, carga un archivo o abre un proyecto. Elige la parte del stream, la duración de los clips y la velocidad. Confirma el permiso y pulsa **Generar clips**. Toda la configuración está aquí; se guarda por proyecto.
-2. **Clips**: revisa las propuestas y pulsa **Elegir y editar**. La puntuación es estimada, no garantiza viralidad.
-3. **Editor**: elige Vertical, Dúo, Tres cuadros o Foto + clip. Arrastra el recorte sobre el video. Añade títulos, logo y subtítulos. Guarda, revisa la vista previa editada y exporta.
+2. **Clips**: revisa las propuestas y descarga directamente el clip horizontal para CapCut. Si quieres encuadrarlo aquí, pulsa **Elegir y editar**. La puntuación es estimada, no garantiza viralidad.
+3. **Editor**: elige Vertical, Dúo, Tres cuadros o Foto + clip. Arrastra el recorte sobre el video. Añade títulos o logo si quieres y pulsa **Descargar MP4 editado · sin subtítulos**. También se mantienen vista previa, guardado y exportación tradicionales.
 
 ## Dos intervalos diferentes
 
@@ -94,6 +104,7 @@ Ollama es opcional: instálalo desde https://ollama.com/ y prepara `qwen3:4b` (u
 
 - **data/originales/**: fuentes importadas y audio original de podcasts.
 - **data/editados/**: MP4, SRT, ASS y decisiones JSON.
+- **data/descargas/**: clips horizontales y referencias de caché para las descargas directas.
 - **data/history.sqlite3**: proyectos, configuración, progreso y candidatos.
 - **data/modelos/**: caché de modelos al iniciar con el BAT.
 

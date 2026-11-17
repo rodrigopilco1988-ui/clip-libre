@@ -256,3 +256,31 @@ Regresiones adicionales: la migración de transcripciones antiguas rechaza expre
 Segundo flujo real Chromium: proyecto de 10 minutos, modo Ultrarrápido, Generar clips con reutilización de análisis de audio ya almacenado, Elegir y editar y Generar / actualizar subtítulos. Se transcribió únicamente el candidato **494–563 s (69 s)** y se guardaron **192 palabras** dentro de ese intervalo. Se comprobó ausencia de excepción Streamlit. Informe ultra-editor-0.6.0.json. Este segundo flujo comprueba la integración de UI, no mide la primera detección; los tiempos de detección provienen del ensayo independiente descrito antes.
 
 CI final 0.6.0: **91 aprobadas en Windows (39,72 s)**; **88 aprobadas y 3 omitidas específicas de Windows en Linux (35,73 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; bibliotecas NVIDIA cargadas sin errores ni ausencias. El runner no tiene GPU física: esto no certifica inferencia CUDA/NVENC. Registro ci-0.6.0.txt.
+
+## Versión 0.7.0: cuadros estables y descarga directa para CapCut
+
+Código: `fbe33dc1e1c0ee4027ac567bd9431d4ae67d4925`.
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/44022094375
+
+Pruebas locales completas: **93 aprobadas y 3 omitidas específicas de Windows en 44,33 s**. Tras el último ajuste defensivo del selector, las dos regresiones de interfaz afectadas pasaron en 5,31 s; la CI ejecuta de nuevo todo el código final.
+
+- El componente del editor usa una clave estable por clip. Un identificador de configuración cambia los cuadros sin destruir el iframe ni recargar el video. Valores enviados desde una configuración anterior se rechazan. Se mantiene una revisión por composición para no sobrescribir un arrastre reciente. El reporte de altura solo se envía cuando cambia.
+- Se usa un MP4 corto compatible en el editor; no se abre de nuevo el original de varias horas en cada cambio de cuadros. Las coordenadas siguen normalizadas y la exportación recorta la fuente original. Se conserva el origen temporal de los subtítulos opcionales. La vista interactiva de una edición manual larga se limita a los primeros 120 s; los límites reales del archivo descargado siguen siendo los elegidos.
+- El selector de cantidad y los botones usan el mismo estado, sin defaults conflictivos. Los títulos duplicados siguen teniendo etiquetas únicas. Añadir, quitar y elegir directamente un número comparten configuración.
+- Subtítulos desactivados inicialmente y apartado opcional cerrado. Se conservan datos, herramientas y exportación tradicional para quien los active; no se requieren para descargar. El botón principal de descarga editada fuerza burn=false y no ejecuta Whisper.
+- Descarga horizontal desde la galería y descarga editada desde el editor mediante data callable de Streamlit 1.67, ejecutada en trabajador separado y on_click=ignore. Se capturan intervalo y ajustes como valores del clic para evitar mezclarlos con cambios posteriores. El trabajador no ejecuta comandos Streamlit.
+- Horizontal conserva dimensiones/fps y audio del archivo importado mediante recodificación MP4 H.264/AAC; no se promete copia bit a bit. Prueba NVENC y recurre a CPU si falla. Archivos temporales, renombrado atómico, caché y bloqueo por trabajo evitan descargas parciales y trabajo repetido. La descarga editada reutiliza el renderer de cuadros/texto/logo y su propia caché. Los originales no se modifican.
+
+### Navegador y archivos reales
+
+Chromium, con material sintético propio autorizado de 10 minutos y un candidato de **494–563 s**, hizo **1 → 2 → 3 → 2 → 1** con los botones y eligió **3** directamente desde el desplegable. El mismo objeto iframe y la URL del video se conservaron. En la comprobación final, cambios medidos **1,022 / 0,945 / 0,414 / 0,952 s**, sin errores JavaScript ni excepciones Streamlit. No son garantías para otro equipo ni reproducen el archivo concreto de la captura del usuario. Informe browser-0.7.0-final.json y captura cuadros-0.7.0.png.
+
+El navegador pulsó cada botón de descarga, recibió el archivo mediante el mecanismo real de descarga y lo guardó. Se comparó el hash del MP4 editado recibido con el archivo que registró SQLite y se comprobó configuración de **dos cuadros y burn=false**. El botón Añadir cuadro seguía habilitado durante la preparación. Archivos verificados con FFprobe: **horizontal 69 s, 640×360, audio**; **editado 69 s, 1080×1920, audio**. Informe descargas-0.7.0.json.
+
+Primer ensayo: descarga editada con render real **28,621 s**, archivo de unos 98 MB con ultrafast; horizontal unos 17 MB. Segundo ensayo con caché: **3,627 s** desde clic hasta recibir/guardar/verificar la descarga editada. El tiempo incluye trabajo de navegador y transferencia local; no equivale a tiempo puro de codificación. Informes browser-0.7.0.json y browser-0.7.0-final.json. Las opciones de mayor compresión siguen disponibles para producir archivos más pequeños.
+
+Pruebas nuevas verifican descarga horizontal acotada, dimensiones/audio y conservación byte a byte del archivo fuente; descarga editada de dos cuadros sin quemar subtítulos; reutilización sin nuevo render; fallo NVENC con recuperación CPU; eliminación de parciales ante fallo CPU; y subtítulos apagados aun con un ajuste guardado anterior activo.
+
+No se probaron de nuevo inferencia en RTX física, descarga real YouTube/Twitch ni Ollama. Se mantienen sus límites anteriores. La codificación y transferencia de la primera descarga necesitan tiempo y espacio; se ejecutan sin bloquear el script de la página. El ejemplo grande se mantiene fuera del repositorio y ZIP, que incluyen únicamente las capturas e informes propios.
+
+CI final 0.7.0: **96 aprobadas en Windows (47,02 s)**; **93 aprobadas y 3 omitidas específicas de Windows en Linux (38,19 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; carga de bibliotecas NVIDIA sin errores ni ausencias. No certifica inferencia CUDA/NVENC en una GPU física. Registro ci-0.7.0.txt.
