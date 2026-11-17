@@ -108,3 +108,36 @@ def test_editor_settings_and_text_are_saved(video,tmp_path,monkeypatch):
     saved=s.candidates(sid)[0]
     assert saved['edit_settings']['overlay_text']=='Mi título nuevo'
     assert len(saved['edit_settings']['panels'])==2
+
+
+def test_batch_silence_uses_each_clips_audio(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    from cliplivre.media import probe
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'batch'))
+    s=Store(tmp_path/'batch'); sid=s.register(video)
+    audio=[dict(time=float(t),end=float(t+1),silence=True,db=-80,change=0) for t in range(4,7)]
+    s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=audio,visual=[]),[dict(start=a,end=b,score=55,title=f'Clip {a}',reason='Prueba',classification='heurística',visual_samples=1,words=[]) for a,b in [(0.,3.),(4.,8.)]])
+    for item in s.candidates(sid): s.update(item['id'],state='aceptado')
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(b for b in app.button if b.label=='Elegir y editar').click().run()
+    next(x for x in app.selectbox if x.label=='Resolución base').select(360).run()
+    next(x for x in app.checkbox if x.label=='Reducir silencios (revisar contexto)').check().run()
+    next(b for b in app.button if b.label=='Exportar lote de 2 clips aceptados').click().run(timeout=40)
+    assert not app.exception and not app.error
+    with s.connect() as db: paths=[r[0] for r in db.execute('SELECT path FROM exports ORDER BY rowid')]
+    assert len(paths)==2
+    assert abs(probe(paths[0])['duration']-3)<.2
+    assert abs(probe(paths[1])['duration']-3.2)<.2
+
+
+def test_word_crossing_clip_boundary_can_be_saved(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'word-bounds'))
+    s=Store(tmp_path/'word-bounds'); sid=s.register(video)
+    word=dict(start=.5,end=1.5,text='Palabra')
+    s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[dict(start=.5,end=1.5,text='Palabra',words=[word])],audio=[],visual=[]),[dict(start=1.,end=4.,score=55,title='Prueba',reason='Prueba',classification='heurística',visual_samples=1,words=[word])])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(b for b in app.button if b.label=='Elegir y editar').click().run()
+    next(b for b in app.button if b.label=='Guardar revisión y configuración').click().run()
+    assert not app.exception and not app.error
+    assert s.candidates(sid)[0]['edited_words'][0]['start']==1.

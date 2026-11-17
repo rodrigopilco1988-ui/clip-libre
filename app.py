@@ -118,7 +118,7 @@ def clip_context(db,sid,start,end,stamp):
             for word in segment.get('words',[]):
                 key=(round(word['start'],3),round(word['end'],3))
                 if key not in seen and word['start']<end and word['end']>start:
-                    words.append(word); seen.add(key)
+                    words.append(dict(word,start=max(start,word['start']),end=min(end,word['end']))); seen.add(key)
         audio.extend(f for f in payload.get('audio',[]) if f['time']<end and f['end']>start)
     unique_audio={(f['time'],f['end']):f for f in audio}
     return sorted(words,key=lambda w:w['start']),sorted(unique_audio.values(),key=lambda f:f['time'])
@@ -315,7 +315,7 @@ if sid:
                 if st.session_state.get('original_open_'+cid): show_clip(source['path'],start,end)
                 stamp=db_stamp()
                 all_words,audio_context=clip_context(str(store.db),sid,start,end,stamp)
-                words=item.get('edited_words',all_words)
+                words=[dict(word,start=max(start,word['start']),end=min(end,word['end'])) for word in item.get('edited_words',all_words) if word['start']<end and word['end']>start]
                 with st.expander('Corregir palabras y sincronización'):
                     st.caption('Ajuste fino: las marcas de palabra usan segundos para sincronizar el audio. La duración del clip se configura arriba en minutos.')
                     edited=st.data_editor(words or [{'start':float(start),'end':float(min(end,start+1)),'text':''}],num_rows='dynamic',key='words'+cid,width='stretch')
@@ -417,7 +417,8 @@ if sid:
                 def make(candidate,settings,preview_mode=False):
                     selected_words=candidate.get('edited_words')
                     if selected_words is None: selected_words=all_words
-                    cuts=silent_intervals(audio_context,candidate['start'],candidate['end']) if reduce else []
+                    candidate_audio=clip_context(str(store.db),sid,candidate['start'],candidate['end'],db_stamp())[1] if reduce else []
+                    cuts=silent_intervals(candidate_audio,candidate['start'],candidate['end']) if reduce else []
                     fingerprint=hashlib.sha256(json.dumps(dict(source=sid,start=candidate['start'],end=candidate['end'],words=selected_words,edit=asdict(settings),cuts=cuts),sort_keys=True).encode()).hexdigest()
                     manifest=ROOT/'vistas_previas'/('edited_'+fingerprint+'.json')
                     manifest.parent.mkdir(exist_ok=True)
