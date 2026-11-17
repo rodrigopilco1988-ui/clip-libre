@@ -1,0 +1,10 @@
+CI: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43991112722
+Commit: 78c5645523de60f714311e0b0d2391f3ea1ad9a9
+Resultado: success Windows y Linux
+
+tests (windows-latest)	Run python -m pytest -q	2026-11-17T00:55:03.5432744Z 63 passed in 37.86s
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-17T00:55:44.3701893Z Instalacion terminada. Abre Iniciar.bat.
+tests (windows-latest)	Instalar.bat real sin pausa en Windows	2026-11-17T00:55:44.7133309Z No broken requirements found.
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-17T00:56:55.4381251Z Bibliotecas NVIDIA cargadas. Reinicia Clip Libre y usa auto. La inferencia GPU debe confirmarse con tu video.
+tests (windows-latest)	RepararGPU.bat y carga real de DLL NVIDIA en Windows	2026-11-17T00:56:55.9811278Z No broken requirements found.
+tests (ubuntu-latest)	Run python -m pytest -q	2026-11-17T00:53:19.3014137Z 60 passed, 3 skipped in 15.52s

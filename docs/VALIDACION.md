@@ -59,7 +59,7 @@ El primer intento de adjuntar el ZIP en el chat no pudo utilizar la ruta de sali
 
 Código: https://github.com/rodrigopilco1988-ui/clip-libre
 
-Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.2.2
+Release prevista para esta versión: https://github.com/rodrigopilco1988-ui/clip-libre/releases/tag/v0.3.0
 
 La Release enlaza el ZIP de código, documentación y ejemplos y `SHA256SUMS.txt`, guardados en la carpeta `distribucion/` del repositorio. Esta vía evita depender del servicio de subida de adjuntos de Releases, que rechazó la autenticación en esta sesión. El checksum se publica por separado para evitar una referencia circular dentro del ZIP. La existencia y descarga de esos adjuntos debe comprobarse al publicar. El ZIP no contiene entornos virtuales, pesos de modelos, ejecutables externos ni la base de datos con rutas de esta máquina.
 
@@ -135,3 +135,21 @@ Commit de código probado: `70c61116b067032d31582c3caabe9048017a6e15`.
 Whisper Tiny int8, una sola carga de modelo, calentamiento previo y audio sintético autorizado de 24,95 s. Cuatro ejecuciones alternadas con beam_size 3,1,1,3: medianas **1,037 s** para 3 y **0,7665 s** para 1; 70 y 69 palabras respectivamente. Datos en `cpu-beam-0.2.2.json`. La versión usa búsqueda de ancho 1 en CPU y conserva 3 en CUDA. Es un ensayo pequeño de transcripción, no tiempo total de la app, no una prueba de calidad ni una garantía para videos largos o para el hardware del usuario.
 
 Las bibliotecas opcionales de NVIDIA son propietarias gratuitas y no se redistribuyen dentro del ZIP. Se descargan desde PyPI; no se copian DLL a System32 ni se instalan controladores. La exportación y OpenCV siguen en CPU. Los fallos irrecuperables de inferencia en el comprobador no cierran el proceso principal porque se ejecuta como hijo.
+
+## Versión 0.3.0: minutos, editor y reducción de esperas
+
+CI final: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/43991112722
+
+Commit de código probado: `78c5645523de60f714311e0b0d2391f3ea1ad9a9`.
+
+- Windows: **63 pruebas aprobadas en 37,86 s**.
+- Linux: **60 aprobadas y 3 omitidas específicas de Windows en 15,52 s**.
+- Instalador normal, reparación NVIDIA, carga real de DLL y pip check volvieron a terminar correctamente en Windows. No equivale a inferencia en una RTX física; se conserva el botón de comprobación del equipo del usuario.
+- Se verifican controles en minutos, análisis completo y máximo desactivado por defecto; propuestas de más de 300 s; selección que abre el editor; cuadros añadidos/quitados; configuración/texto guardados; colores de zonas de origen/destino en exportaciones de 1/2/3 cuadros y coincidencia con la guía; texto ASS y subtítulos; seek real a un tramo posterior; caché y migración de transcripciones anteriores; regeneración de propuestas pendientes con preservación de aceptación, descarte, edición y exportaciones.
+- Se verifican el audio propio de cada clip al exportar un lote con reducción de silencios y el guardado de palabras que cruzan el borde del intervalo.
+- Chromium, contra un proceso nuevo de Streamlit, comprobó selección automática del editor, dos cuadros, texto y aparición del reproductor de la vista previa vertical sin excepción. Se necesita reiniciar la aplicación al actualizar para no conservar módulos importados de una versión anterior. Capturas editor-0.3.0.png y editor-video-0.3.0.png, con el proyecto sintético de demostración ya descrito.
+- Prueba manual: fuente técnica local de 260 s, intervalo 45–255 s (0,75–4,25 min), dos cuadros y texto: **MP4 de 210 s (3,5 min), 360×640, audio conservado, 6,473 s de render**. Color y tono, no contenido real ni prueba de semántica. Informe clip-largo-0.3.0.json.
+
+Ensayo controlado sin pytest concurrente: recorte tardío de 4 s en fuente de 120 s, mismo libx264 ultrafast y 360×640, mediana de renderer anterior **1,0305 s** frente a nuevo **0,2765 s**. En ejemplo autorizado de 24,95 s, Tiny CPU y visión rápida: primer análisis **2,393 s**; tras cambiar duración y reutilizar resultados **0,005 s**, con dos aciertos de caché y una transcripción reutilizada. Memoria RSS muestreada al final 217,4 MB, no máximo del sistema. Ver rendimiento-0.3.0.json y CAMBIOS-0.3.0.md. No se extrapolan esos tiempos a videos largos, red o hardware del usuario.
+
+Limitaciones actuales: propuestas dentro de los límites de cada bloque, composición de zonas del mismo archivo mediante controles (sin arrastre ni multipista), guía estática y render de video a demanda; muestreo rápido puede perder cambios entre fotogramas clave. Procesamiento de audio, filtros y exportación libx264 siguen en CPU. Las limitaciones de proveedores remotos y validación física GPU anteriores se mantienen.

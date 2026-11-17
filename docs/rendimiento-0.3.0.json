@@ -1,0 +1,88 @@
+{
+  "render_trials": [
+    {
+      "version": "old",
+      "seconds": 1.176,
+      "duration": 4.0
+    },
+    {
+      "version": "new",
+      "seconds": 0.323,
+      "duration": 4.0
+    },
+    {
+      "version": "new",
+      "seconds": 0.23,
+      "duration": 4.0
+    },
+    {
+      "version": "old",
+      "seconds": 0.885,
+      "duration": 4.0
+    }
+  ],
+  "render_old_median": 1.0305,
+  "render_new_median": 0.2765,
+  "analysis_first": {
+    "session": "2263508ebaab421e960e465afbc8aec7",
+    "blocks": 1,
+    "processed_until": 24.95,
+    "elapsed_seconds": 2.393,
+    "rss_sampled_mb": 217.4,
+    "warnings": [],
+    "devices": [
+      "cpu"
+    ],
+    "cache_hits": 0,
+    "transcriptions_reused": 0,
+    "stage_seconds": {
+      "audio_transcription": 2.385,
+      "visual_wait": 0.001
+    },
+    "config": {
+      "block_minutes": 50,
+      "model": "tiny",
+      "device": "cpu",
+      "language": "en",
+      "ollama": false,
+      "ollama_model": "qwen3:4b",
+      "visual_step": 6,
+      "visual_fast": true,
+      "min_seconds": 30,
+      "max_seconds": null,
+      "target_seconds": 180,
+      "max_candidates": 20
+    }
+  },
+  "analysis_changed_duration": {
+    "session": "c24179bf3c564bc99567f659f604d47e",
+    "blocks": 1,
+    "processed_until": 24.95,
+    "elapsed_seconds": 0.005,
+    "rss_sampled_mb": 217.4,
+    "warnings": [],
+    "devices": [
+      "cpu"
+    ],
+    "cache_hits": 2,
+    "transcriptions_reused": 1,
+    "stage_seconds": {
+      "audio_transcription": 0.001,
+      "visual_wait": 0.0
+    },
+    "config": {
+      "block_minutes": 50,
+      "model": "tiny",
+      "device": "cpu",
+      "language": "en",
+      "ollama": false,
+      "ollama_model": "qwen3:4b",
+      "visual_step": 6,
+      "visual_fast": true,
+      "min_seconds": 30,
+      "max_seconds": null,
+      "target_seconds": 240,
+      "max_candidates": 20
+    }
+  }
+}

@@ -1,6 +1,15 @@
-# Clip Libre · 0.2.2
+# Clip Libre · 0.3.0
 
 Tu estudio local de clips: pega un enlace o carga un video o podcast, genera propuestas, revisa los momentos y exporta con subtítulos. Interfaz propia en español. Sin créditos, suscripciones ni APIs de IA de pago.
+
+## Lo nuevo en 0.3.0
+
+- **Duraciones en minutos**, sin máximo artificial de 60 o 180 segundos. La duración mínima y la orientativa se configuran al importar o al reanalizar. «Sin límite máximo» está activado; si lo desmarcas, el máximo también se expresa en minutos.
+- **Todo el contenido importado** se analiza por defecto. Eso es independiente de cuánto dura cada clip. Para un directo pasado usa su archivo o VOD accesible; no se puede recuperar contenido que el proveedor no entrega.
+- **Mis clips → Elegir y editar** lleva directamente al editor y acepta ese clip para revisión. La salida inicial es vertical 9:16. Puedes añadir o quitar cuadros hasta tener uno, dos o tres; recortar la zona original y cambiar posición y tamaño de cada cuadro; añadir texto, corregir subtítulos y generar una vista previa editada.
+- **Menos trabajo repetido**: no se vuelve a transcribir al cambiar solo la duración de las propuestas, se cachean fotogramas y vistas previas, y FFmpeg salta directamente al inicio del clip en lugar de recorrer todo lo anterior. El muestreo visual rápido se solapa con Whisper.
+
+Cambiar la duración regenera propuestas pendientes automáticas, incluso si antes eran cortas. Se conservan las aceptadas, descartadas, editadas o exportadas. Para ampliar una de esas, abre el editor y cambia Inicio/Final en minutos.
 
 ## Instalar una vez en Windows
 
@@ -29,10 +38,10 @@ También puedes cerrar la aplicación y ejecutar **RepararGPU.bat**, sin escribi
 3. Pega el enlace o selecciona tu archivo. En videos muy grandes, abre «Mi archivo pesa más de 200 MB» y pega la ruta desde el Explorador de Windows.
 4. Confirma que tienes acceso y permiso para reutilizar el material.
 5. Pulsa **Crear clips**. La generación automática está activada inicialmente.
-6. Abre **Mis clips**: revisa la puntuación estimada, pulsa **Ver clip** y acepta o descarta propuestas.
+6. Abre **Mis clips**: revisa la puntuación estimada y pulsa **Ver clip** para revisar el original. Pulsa **Elegir y editar** para preparar el clip vertical. También puedes aceptar o descartar propuestas.
 7. En **Editor y exportación**, ajusta el intervalo, corrige subtítulos, elige formato y encuadre, genera una vista previa y exporta.
 
-Se analiza inicialmente un bloque de hasta 50 minutos. Si tu contenido es más largo, continúa en **Configurar análisis**: no repetirá los bloques ya confirmados con la misma configuración. La puntuación no garantiza viralidad y los títulos requieren revisión humana.
+Por defecto se analiza **todo el archivo o VOD importado**, guardando avances por bloques de 50 minutos. Puedes limitarlo a un bloque desmarcando la opción de analizar todo. Configurar análisis usa 0 bloques como «todos» y reanuda los ya confirmados. La puntuación no garantiza viralidad y los títulos requieren revisión humana.
 
 ## Qué contenido puedes introducir
 
@@ -110,3 +119,19 @@ En versiones anteriores, selecciona **Configurar análisis → Procesador → cp
 El botón **Ver clip** ya no reutiliza su clave como estado de apertura. Se probó el clic y la reproducción en Chromium, además de su permanencia al cambiar filtros. Las vistas previas se generan a 24 fps, se guardan de forma atómica y se reutilizan; un fallo no deja un archivo parcial que se confunda con una vista válida.
 
 La transcripción CPU usa una búsqueda más rápida (puede dar palabras algo distintas, por lo que conviene revisar subtítulos). Tiny aparece identificado como opción rápida y Small como equilibrada. Esto no convierte el resto del procesamiento en GPU: audio, OpenCV y exportación libx264 siguen usando CPU. Los resultados y límites están en `docs/VALIDACION.md`.
+
+## Editor: uno, dos o tres cuadros
+
+En Encuadre elige **Cuadros editables**. Usa Número de cuadros o Añadir/Quitar; dos cuadros se reparten inicialmente por mitades y tres por tercios. Puedes empezar arriba/abajo o lado a lado y después mover y redimensionar cada cuadro con porcentajes. Cada cuadro recorta una zona independiente del mismo video original: no es un editor multipista de varios archivos.
+
+En **Añadir texto propio** escribe el texto, elige color, tamaño y posición. Los subtítulos tienen sus propios controles de fuente, color de palabra activa, tamaño, posición y animación. La guía estática de encuadre cambia rápidamente sin recodificar el clip; subtítulos sincronizados, animación y seguimiento se revisan con **Generar vista previa editada**. El render idéntico se reutiliza si no cambias nada.
+
+**Guardar revisión y configuración** conserva los ajustes del clip. **Exportar clip con estos ajustes** produce el MP4. El lote aplica los ajustes actuales a los aceptados y conserva las palabras corregidas de cada uno. El original se mantiene separado.
+
+Las marcas de tiempo de las palabras se mantienen en segundos dentro del ajuste fino de sincronización; los controles principales de duración, inicio y final del clip usan minutos. Si amplías un clip a una zona no analizada, analiza primero los minutos pendientes para obtener sus subtítulos.
+
+## Rendimiento: qué se midió
+
+En un ensayo local controlado, recortar 4 s al final de un video de 2 min pasó de una mediana de 1,0305 s a 0,2765 s. Reanalizar el ejemplo autorizado de 24,95 s tras cambiar la duración reutilizó la transcripción: 0,005 s frente a 2,393 s del primer análisis Tiny CPU. Una exportación técnica real de 3,5 minutos con dos cuadros dio un MP4 de 210 s. Estos ejemplos no garantizan tiempos para directos largos, tu conexión o tu hardware. Detalles en `docs/CAMBIOS-0.3.0.md` y `docs/VALIDACION.md`.
+
+Al actualizar, cierra la aplicación por completo, conserva data/ y ejecuta Instalar.bat antes de volver a abrir Iniciar.bat. La tabla de caché se añade automáticamente a SQLite. Cuando se puede identificar el modelo y el idioma de un análisis anterior, se reutiliza su transcripción.

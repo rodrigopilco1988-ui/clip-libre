@@ -1,0 +1,14 @@
+{
+  "source_duration": 260.0,
+  "selected_start_minutes": 0.75,
+  "selected_end_minutes": 4.25,
+  "clip_duration_minutes": 3.5,
+  "media": {
+    "duration": 210.0,
+    "width": 360,
+    "height": 640,
+    "audio": true
+  },
+  "render_seconds": 6.473,
+  "source": "Color y tono generados localmente para prueba técnica; no es una prueba de selección semántica."
+}
