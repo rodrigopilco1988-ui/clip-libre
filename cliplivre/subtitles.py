@@ -69,3 +69,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     base.with_suffix('.srt').write_text('\n'.join(srt),encoding='utf-8')
     base.with_suffix('.ass').write_text(header+'\n'.join(events)+'\n',encoding='utf-8')
     return base.with_suffix('.srt'),base.with_suffix('.ass')
+
+
+def overlay(text,base,duration,width,height,font='Arial',size=64,color='FFFFFF',x=.5,y=.15):
+    if not font.replace(' ','').replace('-','').isalnum(): raise ValueError('Fuente inválida.')
+    if len(color)!=6 or any(c not in '0123456789abcdefABCDEF' for c in color): raise ValueError('Color inválido.')
+    if not 0<=x<=1 or not 0<=y<=1: raise ValueError('Posición de texto inválida.')
+    bgr=color[4:6]+color[2:4]+color[:2]
+    escaped='\\N'.join(ass_escape(line) for line in str(text)[:2000].splitlines())
+    header=f'''[Script Info]
+ScriptType: v4.00+
+PlayResX: {width}
+PlayResY: {height}
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{font},{size},&H00{bgr},&H00{bgr},&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,1,5,10,10,10,1
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+'''
+    event=f'Dialogue: 0,0:00:00.00,{timestamp(duration,True)},Default,,0,0,0,,{{\\pos({round(x*width)},{round(y*height)})}}{escaped}\n'
+    path=Path(base); path.write_text(header+event,encoding='utf-8'); return path

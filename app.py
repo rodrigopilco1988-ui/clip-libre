@@ -96,7 +96,45 @@ def gpu_controls():
             from cliplivre import transcribe
             st.json(dict(libraries=prepare_libraries(),last_cuda_error=transcribe._CUDA_FAILURE))
 
-tabs=st.tabs(['1 · Crear clips','2 · Configurar análisis','3 · Mis clips','4 · Editor y exportación'])
+@st.cache_data(show_spinner=False,max_entries=32)
+def cached_frame(path,time,mtime):
+    from cliplivre.media import frame
+    return frame(path,time)
+
+
+def db_stamp():
+    files=[store.db,Path(str(store.db)+'-wal')]
+    return tuple((p.stat().st_mtime_ns,p.stat().st_size) if p.exists() else (0,0) for p in files)
+
+
+@st.cache_data(show_spinner=False,max_entries=16)
+def clip_context(db,sid,start,end,stamp):
+    import sqlite3
+    with sqlite3.connect(db) as connection:
+        payloads=[json.loads(row[0]) for row in connection.execute('SELECT payload FROM chunks WHERE source=? AND start<? AND end>? ORDER BY start',(sid,end,start))]
+    words=[]; seen=set(); audio=[]
+    for payload in payloads:
+        for segment in payload.get('segments',[]):
+            for word in segment.get('words',[]):
+                key=(round(word['start'],3),round(word['end'],3))
+                if key not in seen and word['start']<end and word['end']>start:
+                    words.append(word); seen.add(key)
+        audio.extend(f for f in payload.get('audio',[]) if f['time']<end and f['end']>start)
+    unique_audio={(f['time'],f['end']):f for f in audio}
+    return sorted(words,key=lambda w:w['start']),sorted(unique_audio.values(),key=lambda f:f['time'])
+
+
+def choose_clip(source_id,clip_id):
+    store.update(clip_id,state='aceptado')
+    st.session_state['editor_clip_'+source_id]=clip_id
+    st.session_state['workflow']='4 · Editor y exportación'
+
+
+def resize_panel_count(key,delta):
+    st.session_state[key]=max(1,min(3,st.session_state[key]+delta))
+
+
+tabs=st.tabs(['1 · Crear clips','2 · Configurar análisis','3 · Mis clips','4 · Editor y exportación'],key='workflow',on_change='rerun')
 with tabs[0]:
     st.markdown('<span class="cl-pill">DE CONTENIDO LARGO A CLIPS CORTOS</span>',unsafe_allow_html=True)
     st.title('Tu próximo clip empieza aquí')
@@ -146,7 +184,12 @@ with tabs[0]:
             a,b=st.columns(2)
             initial_model=a.selectbox('Calidad de transcripción',['small','tiny','base','medium'],format_func=lambda m:{'tiny':'Tiny · más rápido','base':'Base · ligero','small':'Small · equilibrado','medium':'Medium · más lento'}[m])
             initial_language=b.selectbox('Idioma del contenido',['es','en','auto'])
-            st.caption('Small ofrece equilibrio. Tiny reduce el tiempo de espera. Se procesa un primer bloque de hasta 50 minutos; puedes continuar desde Configurar análisis.')
+            initial_full=st.checkbox('Analizar todo el contenido importado',value=True)
+            initial_min=st.number_input('Duración mínima del clip (min)',min_value=.1,value=.5,step=.5)
+            initial_target=st.number_input('Duración orientativa del clip (min)',min_value=.1,value=3.,step=.5)
+            initial_unlimited=st.checkbox('Sin límite máximo de duración del clip',value=True)
+            initial_max=None if initial_unlimited else st.number_input('Duración máxima del clip (min)',min_value=initial_min,value=max(5.,initial_min),step=.5)*60
+            st.caption('Se procesa todo el archivo por bloques guardados. La duración de cada clip es independiente de la duración del directo.')
         if st.button('Crear clips' if automatic else 'Importar contenido',type='primary',disabled=not permission,width='stretch'):
             try:
                 with st.status('Importando contenido…',expanded=True) as status:
@@ -172,7 +215,7 @@ with tabs[0]:
                         bar=st.progress(0.)
                         def initial_progress(f,m):
                             bar.progress(min(1.,max(0.,f))); status.update(label=m)
-                        report=analyze(store,new_sid,Analysis(model=initial_model,language='' if initial_language=='auto' else initial_language),initial_progress,max_blocks=1)
+                        report=analyze(store,new_sid,Analysis(model=initial_model,language='' if initial_language=='auto' else initial_language,min_seconds=initial_min*60,max_seconds=initial_max,target_seconds=initial_target*60,visual_step=6),initial_progress,max_blocks=None if initial_full else 1)
                         st.session_state['import_warnings']=report['warnings']
                         for warning in report['warnings']: st.warning(warning)
                     status.update(label='Tu proyecto está listo',state='complete')
@@ -197,19 +240,24 @@ if sid:
         block=c.number_input('Minutos por bloque',min_value=1,max_value=120,value=50)
         language=st.selectbox('Idioma',['es','en','auto'])
         a,b=st.columns(2)
-        min_s=a.number_input('Duración mínima propuesta (s)',5,120,12)
-        max_s=b.number_input('Duración máxima propuesta (s)',5,180,60)
+        min_m=a.number_input('Duración mínima propuesta (min)',min_value=.1,value=.5,step=.5)
+        target_m=b.number_input('Duración orientativa propuesta (min)',min_value=.1,value=3.,step=.5)
+        unlimited=st.checkbox('Sin máximo de duración por clip',value=True)
+        max_m=None if unlimited else st.number_input('Duración máxima propuesta (min)',min_value=min_m,value=max(5.,min_m),step=.5)
+        fast_profile=st.radio('Análisis visual',['Rápido','Detallado'],horizontal=True)
+        st.caption('Rápido usa muestras de fotogramas clave y deja la detección de rostros para el editor. Detallado usa muestras más frecuentes.')
         use_ollama=st.checkbox('Clasificar con Ollama local (opcional)')
         ollama_model=st.text_input('Modelo Ollama',value='qwen3:4b')
         st.caption('Whisper se descarga y libera antes de usar Ollama. Detén otros modelos GPU para conservar VRAM. Ollama no recibe imágenes; recibe transcripción.')
-        max_blocks=st.number_input('Bloques por revisión (0 = todos)',min_value=0,max_value=100,value=1)
+        max_blocks=st.number_input('Bloques por revisión (0 = todos)',min_value=0,max_value=100,value=0)
         if st.button('Analizar minutos pendientes',type='primary'):
             progress=st.progress(0.); status=st.empty()
             def update(f,m): progress.progress(min(1.,max(0.,f))); status.info(m)
             try:
-                report=analyze(store,sid,Analysis(block_minutes=block,model=model,device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=min_s,max_seconds=max_s),update,max_blocks=max_blocks or None)
+                report=analyze(store,sid,Analysis(block_minutes=block,model=model,device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=min_m*60,max_seconds=None if max_m is None else max_m*60,target_seconds=target_m*60,visual_step=6 if fast_profile=='Rápido' else 2,visual_fast=fast_profile=='Rápido'),update,max_blocks=max_blocks or None)
                 st.success(f"Completado: {report['blocks']} bloques nuevos en {report['elapsed_seconds']:.1f} s. RAM muestreada: {report['rss_sampled_mb']:.0f} MB.")
-                st.caption('Procesador utilizado: '+', '.join(report.get('devices',[]) or ['sin bloques nuevos']))
+                st.caption('Procesador de la transcripción: '+', '.join(report.get('devices',[]) or ['sin bloques nuevos']))
+                if report.get('transcriptions_reused'): st.info(f"Se reutilizaron {report['transcriptions_reused']} bloques de transcripción. No fue necesario volver a procesarlos con Whisper.")
                 for warning in report['warnings']: st.warning(warning)
             except Exception as e: st.error(str(e))
         st.caption('La reanudación usa la misma fuente y configuración. Un cambio de configuración permite reanálisis; los candidatos solapados existentes se conservan. Los bloques no cortan ni modifican el original.')
@@ -233,10 +281,11 @@ if sid:
                 with st.container(border=True):
                     st.markdown(f"<span class='cl-score'>{item['score']}</span> <span style='color:#aeb8c9'>/ 100 · interés estimado</span>",unsafe_allow_html=True)
                     st.subheader(item['title'])
-                    st.caption(f"{item['start']:.1f}–{item['end']:.1f} s · {item['end']-item['start']:.0f} segundos · {item['state']}")
+                    st.caption(f"{item['start']/60:.2f}–{item['end']/60:.2f} min · {(item['end']-item['start'])/60:.2f} min de duración · {item['state']}")
                     st.write(item['reason'])
                     if st.button('Ver clip',key='view_button_'+item['id']): st.session_state['view_open_'+item['id']]=True
-                    if st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
+                    if tabs[2].open and st.session_state.get('view_open_'+item['id']): show_clip(source['path'],item['start'],item['end'])
+                    st.button('Elegir y editar',key='edit_'+item['id'],on_click=choose_clip,args=(sid,item['id']))
                     a,b=st.columns(2)
                     if a.button('Aceptar',key='accept'+item['id']): store.update(item['id'],state='aceptado'); st.rerun()
                     if b.button('Descartar',key='reject'+item['id']): store.update(item['id'],state='descartado'); st.rerun()
@@ -244,108 +293,169 @@ if sid:
                         st.write('Gancho sugerido:',item.get('hook',''))
                         st.caption(f"Método: {item['classification']} · muestras visuales: {item['visual_samples']}")
         if not candidates: st.info('Analiza el video para generar propuestas. No se fuerza un número fijo de clips.')
-    with tabs[3]:
-        st.subheader('Editor y exportación')
-        eligible=[c for c in candidates if c['state']!='descartado']
-        if eligible:
-            cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=lambda k:next(c['title'] for c in eligible if c['id']==k))
-            item=next(c for c in eligible if c['id']==cid)
-            show_clip(source['path'],item['start'],item['end'])
-            a,b=st.columns(2)
-            start=a.number_input('Inicio (segundos)',min_value=0.,max_value=metadata['duration'],value=float(item['start']),key='start'+cid)
-            end=b.number_input('Final (segundos)',min_value=0.,max_value=metadata['duration'],value=float(item['end']),key='end'+cid)
-            title=st.text_input('Título',value=item['title'],key='title'+cid)
-            # Recupera todas las palabras para admitir la ampliación del intervalo.
-            with store.connect() as c:
-                payloads=[json.loads(r[0]) for r in c.execute('SELECT payload FROM chunks WHERE source=? ORDER BY start',(sid,))]
-            all_words=[]; seen=set()
-            for p in payloads:
-                for seg in p['segments']:
-                    for w in seg.get('words',[]):
-                        k=(round(w['start'],2),round(w['end'],2))
-                        if k not in seen: all_words.append(w); seen.add(k)
-            saved=item.get('edited_words')
-            words=saved if saved is not None else [w for w in all_words if start<=w['start']<end]
-            st.caption('Corrige texto y tiempos absolutos. Añade filas si el modelo no generó palabras.')
-            edited=st.data_editor(words or [{'start':float(start),'end':float(min(end,start+1)),'text':''}],num_rows='dynamic',key='words'+cid,use_container_width=True)
-            if st.button('Guardar revisión'):
+    if tabs[3].open:
+        with tabs[3]:
+            from dataclasses import asdict,replace
+            from cliplivre.composition import default_panels,guide
+            from cliplivre.media import frame
+            st.subheader('Configura tu clip en vertical')
+            eligible=[c for c in candidates if c['state']!='descartado']
+            if eligible:
+                cid=st.selectbox('Clip',options=[c['id'] for c in eligible],format_func=lambda k:next(c['title'] for c in eligible if c['id']==k),key='editor_clip_'+sid)
+                item=next(c for c in eligible if c['id']==cid)
+                a,b=st.columns(2)
+                start_m=a.number_input('Inicio del clip (min)',min_value=0.,max_value=metadata['duration']/60,value=float(item['start'])/60,step=.1,format='%.3f',key='start_min_'+cid)
+                end_m=b.number_input('Final del clip (min)',min_value=0.,max_value=metadata['duration']/60,value=float(item['end'])/60,step=.1,format='%.3f',key='end_min_'+cid)
+                start,end=start_m*60,end_m*60
+                title=st.text_input('Título del clip',value=item['title'],key='title'+cid)
+                st.caption(f'Duración seleccionada: {max(0,end-start)/60:.2f} min. Puedes ampliar el intervalo dentro de todo el material analizado.')
+                if end<=start:
+                    st.error('El final debe ser posterior al inicio.'); st.stop()
+                if st.button('Reproducir original horizontal',key='original_'+cid): st.session_state['original_open_'+cid]=True
+                if st.session_state.get('original_open_'+cid): show_clip(source['path'],start,end)
+                stamp=db_stamp()
+                all_words,audio_context=clip_context(str(store.db),sid,start,end,stamp)
+                words=item.get('edited_words',all_words)
+                with st.expander('Corregir palabras y sincronización'):
+                    st.caption('Ajuste fino: las marcas de palabra usan segundos para sincronizar el audio. La duración del clip se configura arriba en minutos.')
+                    edited=st.data_editor(words or [{'start':float(start),'end':float(min(end,start+1)),'text':''}],num_rows='dynamic',key='words'+cid,width='stretch')
+                saved=item.get('edit_settings',{})
+                template=st.selectbox('Plantilla',['Limpia','Dinámica','Gameplay + cámara'])
+                a,b,c=st.columns(3)
+                aspect=a.selectbox('Formato',['9:16','1:1','16:9'],index=['9:16','1:1','16:9'].index(saved.get('aspect','9:16')))
+                resolution=b.selectbox('Resolución base',[1080,720,360],index=[1080,720,360].index(saved.get('resolution',1080)))
+                framing=c.selectbox('Encuadre',['paneles','ajustar','centro','rostros','streamer'],format_func=lambda x:{'paneles':'Cuadros editables','ajustar':'Video completo con bandas','centro':'Recortar al centro','rostros':'Seguir rostros','streamer':'Gameplay + cámara'}[x],index=['paneles','ajustar','centro','rostros','streamer'].index(saved.get('framing','streamer' if template=='Gameplay + cámara' else 'paneles')))
+                panels=None; roi=None; cx=.5; cy=.5
+                if framing=='paneles':
+                    count_key='panel_count_'+cid
+                    a,b,c=st.columns([2,1,1])
+                    n=a.selectbox('Número de cuadros',[1,2,3],index=max(0,min(2,len(saved.get('panels') or [1])-1)),key=count_key)
+                    b.button('Añadir cuadro',disabled=n==3,on_click=resize_panel_count,args=(count_key,1),key='add_'+cid)
+                    c.button('Quitar último cuadro',disabled=n==1,on_click=resize_panel_count,args=(count_key,-1),key='remove_'+cid)
+                    saved_arrangement=item.get('editor_arrangement','Arriba / abajo')
+                    arrangement=st.radio('Distribución inicial',['Arriba / abajo','Lado a lado'],index=1 if saved_arrangement=='Lado a lado' else 0,horizontal=True,key='arrangement_'+cid)
+                    defaults=default_panels(n,arrangement=='Lado a lado')
+                    old_panels=saved.get('panels') or []
+                    panels=[]
+                    for i,default in enumerate(defaults):
+                        initial_source=old_panels[i]['source'] if i<len(old_panels) else default['source']
+                        initial_destination=old_panels[i]['destination'] if i<len(old_panels) and n==len(old_panels) and arrangement==saved_arrangement else default['destination']
+                        with st.expander(f'Cuadro {i+1}: recortar, mover y cambiar tamaño',expanded=n==1):
+                            st.write('Zona del video original que quieres mostrar')
+                            cols=st.columns(4)
+                            values=[cols[j].number_input(label,min_value=0. if j<2 else 1.,max_value=99. if j<2 else 100.,value=float(initial_source[j]*100),step=1.,key=f'src_{cid}_{i}_{j}')/100 for j,label in enumerate(['Izquierda (%)','Arriba (%)','Ancho (%)','Alto (%)'])]
+                            x,y,pw,ph=values; source_roi=[x,y,min(pw,1-x),min(ph,1-y)]
+                            st.write('Posición y tamaño dentro del lienzo de salida')
+                            cols=st.columns(4)
+                            dest_values=[cols[j].number_input(label,min_value=0. if j<2 else 1.,max_value=99. if j<2 else 100.,value=float(initial_destination[j]*100),step=1.,key=f'dst_{cid}_{n}_{arrangement}_{i}_{j}')/100 for j,label in enumerate(['X del cuadro (%)','Y del cuadro (%)','Ancho del cuadro (%)','Alto del cuadro (%)'])]
+                            dx,dy,dw,dh=dest_values; dest_roi=[dx,dy,min(dw,1-dx),min(dh,1-dy)]
+                            fit=st.selectbox('Contenido del cuadro',['cover','contain'],format_func=lambda f:'Llenar y recortar' if f=='cover' else 'Mostrar todo con bandas',index=1 if i<len(old_panels) and old_panels[i].get('fit')=='contain' else 0,key=f'fit_{cid}_{i}')
+                            panels.append(dict(source=source_roi,destination=dest_roi,fit=fit))
+                else:
+                    a,b=st.columns(2)
+                    cx=a.slider('Centro horizontal',0.,1.,.5); cy=b.slider('Centro vertical',0.,1.,.5)
+                    if framing=='streamer':
+                        from cliplivre.signals import visual_features
+                        if st.button('Sugerir región de cámara por rostros'):
+                            frames=visual_features(source['path'],start,min(end,start+10),1.)
+                            boxes=[r for f in frames for r in f['faces'] if (r[0]<.3 or r[0]>.65) and (r[1]<.3 or r[1]>.6)]
+                            if boxes:
+                                x,y,pw,ph=boxes[0]; x=max(0,x-pw); y=max(0,y-ph*.5)
+                                st.session_state['roi'+cid]=(x,y,min(1-x,pw*3),min(1-y,ph*2.5))
+                            else: st.warning('No se encontró un rostro en una esquina. Puedes definir la cámara manualmente.')
+                        defaults=st.session_state.get('roi'+cid,(0.,0.,.25,.3)); cols=st.columns(4)
+                        roi=tuple(cols[i].number_input(label,0.,1.,float(defaults[i]),.01,key=f'roi{cid}{i}{defaults}') for i,label in enumerate(['X cámara','Y cámara','Ancho cámara','Alto cámara']))
+                with st.expander('Añadir texto propio',expanded=bool(saved.get('overlay_text'))):
+                    overlay_text=st.text_area('Texto sobre el video',value=saved.get('overlay_text',''),max_chars=2000,key='overlay_'+cid)
+                    a,b=st.columns(2)
+                    text_color=a.color_picker('Color del texto',value='#'+saved.get('overlay_color','FFFFFF'),key='text_color_'+cid)
+                    text_size=b.slider('Tamaño del texto',24,120,int(saved.get('overlay_size',64)),key='text_size_'+cid)
+                    a,b=st.columns(2)
+                    text_x=a.slider('Posición horizontal del texto (%)',0,100,round(saved.get('overlay_x',.5)*100),key='text_x_'+cid)/100
+                    text_y=b.slider('Posición vertical del texto (%)',0,100,round(saved.get('overlay_y',.15)*100),key='text_y_'+cid)/100
+                burn=st.checkbox('Incrustar subtítulos',value=saved.get('burn',True))
+                animated=st.checkbox('Animar subtítulos',value=saved.get('animated',template=='Dinámica'))
+                a,b,c=st.columns(3)
+                font=a.selectbox('Fuente',['Arial','Verdana','DejaVu Sans'],index=['Arial','Verdana','DejaVu Sans'].index(saved.get('font','Arial')))
+                color=b.color_picker('Color de palabra activa','#'+saved.get('color','FFFF00'))
+                position=c.selectbox('Posición de subtítulos',['Abajo','Centro','Arriba'],index={2:0,5:1,8:2}[saved.get('subtitle_position',2)])
+                size=st.slider('Tamaño de subtítulos',24,90,saved.get('font_size',54))
+                with st.expander('Zoom, silencios y efectos'):
+                    zoom=st.slider('Zoom suave máximo',1.,1.2,1.08 if template=='Dinámica' else 1.,.01)
+                    fade=st.checkbox('Fundidos de entrada y salida',value=template=='Dinámica')
+                    reduce=st.checkbox('Reducir silencios (revisar contexto)')
+                edit=Edit(aspect=aspect,resolution=resolution,framing=framing,center_x=cx,center_y=cy,zoom=zoom,fade=fade,burn=burn,animated=animated,font=font,font_size=size,color=color.lstrip('#'),subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],streamer_roi=roi,panels=panels,overlay_text=overlay_text,overlay_size=text_size,overlay_color=text_color.lstrip('#'),overlay_x=text_x,overlay_y=text_y)
+                st.subheader('Encuadre: vista inmediata')
                 try:
-                    if not 0<=start<end<=metadata['duration']: raise ValueError('Intervalo inválido.')
-                    checked=[]
-                    for w in edited:
-                        if w['text'] and not start<=float(w['start'])<float(w['end'])<=end: raise ValueError('Cada palabra debe estar dentro del clip.')
-                        if w['text']: checked.append(dict(start=float(w['start']),end=float(w['end']),text=str(w['text'])))
-                    item.update(start=start,end=end,title=title,edited_words=checked)
-                    store.update(cid,payload=item); st.success('Revisión guardada.')
-                except Exception as e: st.error(str(e))
-            template=st.selectbox('Plantilla',['Limpia','Dinámica','Gameplay + cámara'])
-            a,b,c=st.columns(3)
-            aspect=a.selectbox('Formato',['9:16','1:1','16:9'])
-            resolution=b.selectbox('Resolución base',[1080,720,360])
-            framing=c.selectbox('Encuadre',['ajustar','centro','rostros','streamer'],index=3 if template=='Gameplay + cámara' else 0)
-            st.caption('Rostros: detección y seguimiento aproximado; no identifica personas ni determina el hablante. Cámara: confirma la región antes de exportar.')
-            a,b=st.columns(2)
-            cx=a.slider('Centro horizontal',0.,1.,.5); cy=b.slider('Centro vertical',0.,1.,.5)
-            roi=None
-            if framing=='streamer':
-                from cliplivre.signals import visual_features
-                if st.button('Sugerir región de cámara por rostros'):
-                    frames=visual_features(source['path'],start,min(end,start+10),1.)
-                    boxes=[r for f in frames for r in f['faces'] if (r[0]<.3 or r[0]>.65) and (r[1]<.3 or r[1]>.6)]
-                    if boxes:
-                        x,y,w,h=boxes[0]; x=max(0,x-w); y=max(0,y-h*.5); w=min(1-x,w*3); h=min(1-y,h*2.5)
-                        st.session_state['roi'+cid]=(x,y,w,h)
-                    else: st.warning('No se encontró un rostro en una esquina. Define la cámara manualmente.')
-                defaults=st.session_state.get('roi'+cid,(0.,0.,.25,.3))
-                cols=st.columns(4)
-                roi=tuple(cols[i].number_input(label,0.,1.,float(defaults[i]),.01,key=f'roi{cid}{i}{defaults}') for i,label in enumerate(['X cámara','Y cámara','Ancho cámara','Alto cámara']))
-            zoom=st.slider('Zoom suave máximo',1.,1.2,1.08 if template=='Dinámica' else 1.,.01)
-            fade=st.checkbox('Fundidos de entrada y salida',value=template=='Dinámica')
-            reduce=st.checkbox('Reducir silencios (máximo 0,8 s por pausa; revisar contexto)')
-            burn=st.checkbox('Incrustar subtítulos',value=True)
-            animated=st.checkbox('Animar subtítulos',value=template=='Dinámica')
-            a,b,c=st.columns(3)
-            font=a.selectbox('Fuente',['Arial','Verdana','DejaVu Sans'])
-            color=b.color_picker('Color de palabra activa','#FFFF00')
-            position=c.selectbox('Posición',['Abajo','Centro','Arriba'])
-            size=st.slider('Tamaño de fuente (base 1080)',24,90,54)
-            edit=Edit(aspect=aspect,resolution=resolution,framing=framing,center_x=cx,center_y=cy,zoom=zoom,fade=fade,burn=burn,animated=animated,font=font,font_size=size,color=color.lstrip('#'),subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],streamer_roi=roi)
-            def make(candidate,settings):
-                selected_words=candidate.get('edited_words')
-                if selected_words is None: selected_words=[w for w in all_words if candidate['start']<=w['start']<candidate['end']]
-                cuts=[]
-                if reduce:
-                    feats=[f for p in payloads for f in p['audio']]
-                    cuts=silent_intervals(feats,candidate['start'],candidate['end'])
-                return render(source['path'],candidate['start'],candidate['end'],selected_words,ROOT/'editados',settings,cuts,lambda m:status.info(m))
-            status=st.empty()
-            if st.button('Generar vista previa editada'):
-                try:
-                    from dataclasses import replace
-                    candidate=dict(item,start=start,end=end,edited_words=list(edited))
-                    with st.spinner('Renderizando vista previa…'): result=make(candidate,replace(edit,resolution=360,preset='ultrafast'))
-                    st.session_state['preview'+cid]=str(result)
-                except Exception as e: st.error(str(e))
-            if st.session_state.get('preview'+cid): st.video(st.session_state['preview'+cid])
-            st.caption('La vista previa es un render real. Si cambias ajustes, genérala de nuevo antes de exportar.')
-            if st.button('Exportar clip con estos ajustes',type='primary'):
-                try:
-                    with st.spinner('Exportando…'): result=make(dict(item,start=start,end=end,edited_words=list(edited)),edit)
-                    store.export(cid,result,edit.__dict__); st.session_state['export'+cid]=str(result)
-                except Exception as e: st.error(str(e))
-            if st.session_state.get('export'+cid):
-                result=Path(st.session_state['export'+cid]); st.success(str(result)); st.video(str(result))
-                for name in ['editado.mp4','subtitulos.srt','subtitulos.ass','edicion.json']:
-                    p=result.parent/name
-                    st.download_button('Descargar '+name,p.read_bytes(),file_name=name,key=str(p))
-            accepted=[c for c in eligible if c['state']=='aceptado']
-            st.caption('Lotes: aplica los ajustes actuales a los clips aceptados; usa las correcciones de palabras guardadas.')
-            if st.button(f'Exportar lote de {len(accepted)} clips aceptados',disabled=not accepted):
-                for candidate in accepted:
+                    from cliplivre.render import dimensions
+                    w,h=dimensions(aspect,360)
+                    source_image=cached_frame(source['path'],min(start+.2,end-.01),Path(source['path']).stat().st_mtime_ns)
+                    guide_panels=panels
+                    if not guide_panels:
+                        guide_panels=default_panels(1); guide_panels[0]['fit']='contain' if framing=='ajustar' else 'cover'
+                        if framing=='streamer' and roi:
+                            guide_panels=[dict(source=list(roi),destination=[0,0,1,1/3],fit='cover'),dict(source=[0,0,1,1],destination=[0,1/3,1,2/3],fit='contain')]
+                        elif framing in {'centro','rostros'}:
+                            ratio=metadata['width']/metadata['height']; output_ratio=w/h
+                            rw=min(1.,output_ratio/ratio); rh=min(1.,ratio/output_ratio)
+                            guide_panels[0]['source']=[(1-rw)*cx,(1-rh)*cy,rw,rh]
+                    picture=guide(source_image,guide_panels,w,h,overlay_text,text_x,text_y,text_color.lstrip('#'),text_size)
+                    st.image(picture,width=min(400,w))
+                    st.caption('Guía estática rápida de cuadros y texto. Para comprobar subtítulos sincronizados, seguimiento, zoom y animaciones, genera la vista previa editada.')
+                except Exception as e: st.error('No se pudo mostrar la guía: '+str(e))
+                if st.button('Guardar revisión y configuración'):
                     try:
-                        result=make(candidate,edit); store.export(candidate['id'],result,edit.__dict__); st.success(str(result))
-                    except Exception as e: st.error(f"{candidate['title']}: {e}")
-        else: st.info('Primero analiza un video y revisa sus candidatos.')
+                        checked=[]
+                        for word in edited:
+                            if word['text']:
+                                if not start<=float(word['start'])<float(word['end'])<=end: raise ValueError('Cada palabra debe estar dentro del clip.')
+                                checked.append(dict(start=float(word['start']),end=float(word['end']),text=str(word['text'])))
+                        item.update(start=start,end=end,title=title,edited_words=checked,edit_settings=asdict(edit),editor_arrangement=arrangement if framing=='paneles' else 'Arriba / abajo')
+                        store.update(cid,payload=item); st.success('Clip y configuración guardados.')
+                    except Exception as e: st.error(str(e))
+                status=st.empty()
+                def make(candidate,settings,preview_mode=False):
+                    selected_words=candidate.get('edited_words')
+                    if selected_words is None: selected_words=all_words
+                    cuts=silent_intervals(audio_context,candidate['start'],candidate['end']) if reduce else []
+                    fingerprint=hashlib.sha256(json.dumps(dict(source=sid,start=candidate['start'],end=candidate['end'],words=selected_words,edit=asdict(settings),cuts=cuts),sort_keys=True).encode()).hexdigest()
+                    manifest=ROOT/'vistas_previas'/('edited_'+fingerprint+'.json')
+                    manifest.parent.mkdir(exist_ok=True)
+                    if preview_mode and manifest.exists():
+                        saved_output=Path(json.loads(manifest.read_text())['path'])
+                        if saved_output.exists(): return saved_output
+                    result=render(source['path'],candidate['start'],candidate['end'],selected_words,ROOT/'editados',settings,cuts,lambda m:status.info(m))
+                    if preview_mode: manifest.write_text(json.dumps(dict(path=str(result))))
+                    return result
+                if st.button('Generar vista previa editada'):
+                    try:
+                        with st.spinner('Renderizando solo el intervalo elegido…'):
+                            result=make(dict(item,start=start,end=end,edited_words=list(edited)),replace(edit,resolution=360,preset='ultrafast'),True)
+                        st.session_state['preview'+cid]=str(result)
+                    except Exception as e: st.error(str(e))
+                if st.session_state.get('preview'+cid): st.video(st.session_state['preview'+cid])
+                st.caption('La vista previa en video incluye los efectos reales y se reutiliza si no cambias los ajustes.')
+                if st.button('Exportar clip con estos ajustes',type='primary'):
+                    try:
+                        with st.spinner('Exportando el clip configurado…'): result=make(dict(item,start=start,end=end,edited_words=list(edited)),edit)
+                        store.export(cid,result,asdict(edit)); st.session_state['export'+cid]=str(result)
+                    except Exception as e: st.error(str(e))
+                if st.session_state.get('export'+cid):
+                    result=Path(st.session_state['export'+cid]); st.success(str(result)); st.video(str(result))
+                    for name in ['editado.mp4','subtitulos.srt','subtitulos.ass','texto.ass','edicion.json']:
+                        p=result.parent/name
+                        if p.exists(): st.download_button('Descargar '+name,p.read_bytes(),file_name=name,key=str(p))
+                accepted=[c for c in eligible if c['state']=='aceptado']
+                st.caption('Lote: aplica estos ajustes a los clips aceptados. Las palabras guardadas se conservan.')
+                if st.button(f'Exportar lote de {len(accepted)} clips aceptados',disabled=not accepted):
+                    for candidate in accepted:
+                        try:
+                            batch_words,_=clip_context(str(store.db),sid,candidate['start'],candidate['end'],db_stamp())
+                            result=make(dict(candidate,edited_words=candidate.get('edited_words',batch_words)),edit)
+                            store.export(candidate['id'],result,asdict(edit)); st.success(str(result))
+                        except Exception as e: st.error(f"{candidate['title']}: {e}")
+            else: st.info('Elige un clip en Mis clips para configurarlo.')
+
 else:
     for tab in tabs[1:]:
         with tab: st.info('Importa un video y selecciona un proyecto en la biblioteca.')

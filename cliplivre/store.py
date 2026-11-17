@@ -13,6 +13,7 @@ class Store:
         with self.connect() as c:
             c.executescript('''
             PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS artifacts(source TEXT, kind TEXT, start REAL, end REAL, payload TEXT, PRIMARY KEY(source,kind,start,end));
             CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL, created TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS chunks(source TEXT, session TEXT, start REAL, end REAL, config TEXT, payload TEXT, PRIMARY KEY(source,start,end,config));
             CREATE TABLE IF NOT EXISTS candidates(id TEXT PRIMARY KEY, source TEXT, start REAL, end REAL, payload TEXT, state TEXT DEFAULT 'pendiente');
@@ -78,3 +79,29 @@ class Store:
     def export(self, cid, path, config):
         with self.connect() as c:
             c.execute('INSERT INTO exports(id,candidate,path,config) VALUES(?,?,?,?)',(uuid.uuid4().hex,cid,str(path),json.dumps(config)))
+
+    def artifact(self,sid,kind,start,end):
+        with self.connect() as c:
+            row=c.execute('SELECT payload FROM artifacts WHERE source=? AND kind=? AND start=? AND end=?',(sid,kind,start,end)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_artifact(self,sid,kind,start,end,payload):
+        with self.connect() as c:
+            c.execute('INSERT OR REPLACE INTO artifacts VALUES(?,?,?,?,?)',(sid,kind,start,end,json.dumps(payload,ensure_ascii=False)))
+
+    def compatible_transcript(self,sid,model,language,start,end):
+        # Migra resultados de versiones anteriores sin adivinar qué modelo los produjo.
+        with self.connect() as c:
+            reports=c.execute("SELECT message FROM jobs WHERE source=? AND state='completado' ORDER BY updated DESC",(sid,)).fetchall()
+            for row in reports:
+                try:
+                    config=json.loads(row[0])['config']
+                    if config.get('model')!=model or config.get('language')!=language: continue
+                    key=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()
+                    old=c.execute('SELECT payload FROM chunks WHERE source=? AND config=? AND start=? AND end=?',(sid,key,start,end)).fetchone()
+                    if old:
+                        payload=json.loads(old[0])
+                        if all(k in payload for k in ['segments','audio','metadata']):
+                            return {k:payload[k] for k in ['segments','audio','metadata']}
+                except (KeyError,ValueError,TypeError): continue
+        return None

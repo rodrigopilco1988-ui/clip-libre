@@ -1,19 +1,33 @@
 import json
 import re
+from bisect import bisect_left, bisect_right
 import requests
 
 KEYWORDS = ('increíble','mira','qué','wow','no puede','jaj','sorpresa','cuidado','ganamos','perdimos','policía','persecución')
 
-def propose(segments, audio, visual, start, end, limit=20, min_seconds=12, max_seconds=60):
+def propose(segments, audio, visual, start, end, limit=20, min_seconds=30, max_seconds=None,target_seconds=180):
+    segments=sorted(segments,key=lambda s:s['start'])
+    audio=sorted(audio,key=lambda f:f['time']); visual=sorted(visual,key=lambda f:f['time'])
+    segment_times=[s['start'] for s in segments]
+    audio_times=[s['time'] for s in audio]; visual_times=[f['time'] for f in visual]
+    all_words=sorted([w for s in segments for w in s.get('words',[])],key=lambda w:w['start'])
+    word_times=[w['start'] for w in all_words]
     pool=[]
-    for seg in segments:
+    for index,seg in enumerate(segments):
         a=max(start,seg['start']-2)
-        b=min(end,max(seg['end']+3,a+min_seconds))
-        b=min(b,a+max_seconds)
+        target=min(end,a+max(min_seconds,target_seconds))
+        if max_seconds is not None: target=min(target,a+max_seconds)
+        # Cierra en una frase cercana al objetivo; no impone un máximo de 60/180 s.
+        j=bisect_left(segment_times,target,lo=index)
+        b=min(end,max(seg['end']+3,target))
+        if j<len(segments) and segments[j]['start']<=target+20:
+            b=min(end,segments[j]['end']+1)
+        if max_seconds is not None: b=min(b,a+max_seconds)
         if b-a < min(5,min_seconds): continue
-        words=' '.join(s['text'] for s in segments if s['start'] < b and s['end'] > a)
-        features=[f for f in audio if a<=f['time']<b]
-        frames=[f for f in visual if a<=f['time']<b]
+        context=segments[max(0,bisect_left(segment_times,a)-1):bisect_left(segment_times,b)]
+        words=' '.join(s['text'] for s in context if s['end']>a)
+        features=audio[bisect_left(audio_times,a):bisect_left(audio_times,b)]
+        frames=visual[bisect_left(visual_times,a):bisect_left(visual_times,b)]
         energy=max([max(0,(f['db']+45)/45) for f in features],default=0)
         change=max([min(1,f['change']/25) for f in features],default=0)
         scene=max([f['scene'] for f in frames],default=0)
@@ -21,8 +35,7 @@ def propose(segments, audio, visual, start, end, limit=20, min_seconds=12, max_s
         score=round(min(100,25+25*energy+15*change+15*scene+20*lexical))
         pool.append(dict(start=round(a,3),end=round(b,3),score=score,title=words[:85] or 'Cambio audiovisual',
              hook=words[:120],reason=f'Energía {energy:.2f}; variación de audio {change:.2f}; cambio visual {scene:.2f}. Estimación heurística.',
-             evidence=words,classification='heurística',words=[w for s in segments for w in s.get('words',[]) if a<=w['start']<b],
-             visual_samples=len(frames)))
+             evidence=words,classification='heurística',words=all_words[bisect_left(word_times,a):bisect_left(word_times,b)],visual_samples=len(frames)))
     # También encuentra cambios sin diálogo. No les atribuye acontecimientos semánticos.
     if not pool:
         for f in sorted(audio,key=lambda x:x['change'],reverse=True)[:40]:

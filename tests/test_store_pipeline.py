@@ -50,3 +50,31 @@ def test_next_review_processes_only_new_minutes(video,tmp_path):
     second=analyze(s,sid,config,transcriber=transcript,max_blocks=1)
     assert second['blocks']==1 and second['processed_until']==8
     assert analyze(s,sid,config,transcriber=transcript)['blocks']==0
+
+
+def test_duration_change_reuses_expensive_transcription(video,tmp_path):
+    s=Store(tmp_path/'cache'); sid=s.register(video)
+    first=Analysis(block_minutes=1,model='tiny',min_seconds=1,target_seconds=3)
+    analyze(s,sid,first,transcriber=transcript)
+    second=Analysis(block_minutes=1,model='tiny',min_seconds=2,target_seconds=6,max_seconds=None)
+    report=analyze(s,sid,second,transcriber=lambda *args:pytest.fail('No debe repetir Whisper por cambiar la duración'))
+    assert report['transcriptions_reused']==1 and report['cache_hits']==2
+
+
+def test_legacy_transcription_can_be_reused(video,tmp_path):
+    import hashlib
+    s=Store(tmp_path/'legacy'); sid=s.register(video)
+    config=dict(block_minutes=50,model='tiny',device='cpu',language='es',ollama=False,ollama_model='qwen3:4b',visual_step=2,min_seconds=12,max_seconds=60,max_candidates=20)
+    key=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()
+    segments,metadata=transcript(None)
+    s.save_chunk(sid,'legacy',0,8,key,dict(segments=segments,audio=[],visual=[],metadata=metadata),[])
+    s.job('legacy',sid,'completado',json.dumps(dict(config=config)))
+    report=analyze(s,sid,Analysis(model='tiny',min_seconds=1),transcriber=lambda *args:pytest.fail('Debe reutilizar el análisis anterior'))
+    assert report['transcriptions_reused']==1
+
+
+def test_long_clips_have_no_sixty_or_180_second_limit():
+    from cliplivre.rank import propose
+    segments=[dict(start=float(i),end=float(i+20),text='Conversación con contexto',words=[]) for i in range(0,600,20)]
+    result=propose(segments,[],[],0,600,min_seconds=240,max_seconds=None,target_seconds=300)
+    assert result and result[0]['end']-result[0]['start']>=300

@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clip-libre"
-version = "0.2.2"
+version = "0.3.0"
 description = "Editor local de clips con IA opcional"
 requires-python = ">=3.11,<3.14"
 license = "MIT"
-dependencies = ["streamlit>=1.45,<2", "numpy>=2,<3", "opencv-python-headless>=4.10,<5", "faster-whisper>=1.1,<2", "requests>=2.32,<3", "yt-dlp[default,deno]>=2026.1", "psutil>=6,<8"]
+dependencies = ["streamlit>=1.67,<2", "numpy>=2,<3", "opencv-python-headless>=4.10,<5", "faster-whisper>=1.1,<2", "requests>=2.32,<3", "yt-dlp[default,deno]>=2026.1", "psutil>=6,<8", "Pillow>=10,<14"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]

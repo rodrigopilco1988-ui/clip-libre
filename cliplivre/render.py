@@ -5,7 +5,8 @@ import math
 import uuid
 from functools import lru_cache
 from .media import probe, run
-from .subtitles import map_words, write
+from .subtitles import map_words, write, overlay
+from .composition import geometry,validate_panel
 from .signals import visual_features
 
 
@@ -33,6 +34,12 @@ class Edit:
     subtitle_position: int = 2
     preset: str = 'veryfast'
     streamer_roi: tuple | None = None
+    panels: list | None = None
+    overlay_text: str = ''
+    overlay_size: int = 64
+    overlay_color: str = 'FFFFFF'
+    overlay_x: float = .5
+    overlay_y: float = .15
 
 
 def retained(start,end,cuts):
@@ -81,7 +88,7 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     if end>info['duration']+.1: raise ValueError('El final excede la duración del video.')
     if not 1<=edit.zoom<=1.2: raise ValueError('El zoom debe estar entre 1 y 1,2.')
     if not 0<=edit.center_x<=1 or not 0<=edit.center_y<=1: raise ValueError('Centro fuera de rango.')
-    if edit.framing not in {'ajustar','centro','rostros','streamer'}: raise ValueError('Encuadre inválido.')
+    if edit.framing not in {'ajustar','centro','rostros','streamer','paneles'}: raise ValueError('Encuadre inválido.')
     intervals=retained(start,end,cuts)
     w,h=dimensions(edit.aspect,edit.resolution)
     target=Path(output_root).resolve()/('clip_'+uuid.uuid4().hex[:12]); target.mkdir(parents=True)
@@ -90,12 +97,25 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     srt,ass=write(relative_words,target/'subtitulos',w,h,edit.font,round(edit.font_size*w/1080),edit.color,edit.subtitle_position,edit.animated)
     graph=[]
     for i,(a,b) in enumerate(intervals):
-        graph.append(f'[0:v]trim=start={a:.6f}:end={b:.6f},setpts=PTS-STARTPTS[v{i}]')
-        if info['audio']: graph.append(f'[0:a]atrim=start={a:.6f}:end={b:.6f},asetpts=PTS-STARTPTS[a{i}]')
+        graph.append(f'[0:v]trim=start={a-start:.6f}:end={b-start:.6f},setpts=PTS-STARTPTS[v{i}]')
+        if info['audio']: graph.append(f'[0:a]atrim=start={a-start:.6f}:end={b-start:.6f},asetpts=PTS-STARTPTS[a{i}]')
     inputs=''.join(f'[v{i}]'+(f'[a{i}]' if info['audio'] else '') for i in range(len(intervals)))
     graph.append(inputs+f'concat=n={len(intervals)}:v=1:a={int(info["audio"])}[joined]'+('[sound]' if info['audio'] else ''))
     frame='[joined]'
-    if edit.framing=='streamer':
+    if edit.framing=='paneles':
+        panels=edit.panels
+        if not panels or not 1<=len(panels)<=3: raise ValueError('Elige entre uno y tres cuadros.')
+        graph.append(frame+f'split={len(panels)+1}[canvas_source]'+''.join(f'[panel{i}]' for i in range(len(panels))))
+        graph.append(f'[canvas_source]scale={w}:{h},drawbox=color=black:t=fill,setsar=1[canvas0]')
+        for i,panel in enumerate(panels):
+            validate_panel(panel)
+            sx,sy,sw,sh=panel['source']; dx,dy,dw,dh=geometry(panel,w,h)
+            if panel.get('fit','cover')=='cover': fit=f'scale={dw}:{dh}:force_original_aspect_ratio=increase,crop={dw}:{dh}'
+            else: fit=f'scale={dw}:{dh}:force_original_aspect_ratio=decrease,pad={dw}:{dh}:(ow-iw)/2:(oh-ih)/2'
+            graph.append(f'[panel{i}]crop=iw*{sw}:ih*{sh}:iw*{sx}:ih*{sy},{fit},setsar=1[layer{i}]')
+            graph.append(f'[canvas{i}][layer{i}]overlay=x={dx}:y={dy}:shortest=1[canvas{i+1}]')
+        graph.append(f'[canvas{len(panels)}]null[framed]')
+    elif edit.framing=='streamer':
         roi=edit.streamer_roi
         if not roi or len(roi)!=4 or any(not 0<=v<=1 for v in roi) or roi[2]<=0 or roi[3]<=0 or roi[0]+roi[2]>1 or roi[1]+roi[3]>1:
             raise ValueError('Define una región válida para la cámara (x, y, ancho, alto).')
@@ -122,16 +142,19 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     duration=sum(b-a for a,b in intervals)
     if edit.fade: filters.extend(['fade=t=in:st=0:d=0.2',f'fade=t=out:st={max(0,duration-.2):.4f}:d=0.2'])
     if edit.burn and relative_words: filters.append('ass=subtitulos.ass')
+    if edit.overlay_text.strip():
+        overlay(edit.overlay_text,target/'texto.ass',duration,w,h,edit.font,round(edit.overlay_size*w/1080),edit.overlay_color,edit.overlay_x,edit.overlay_y)
+        filters.append('ass=texto.ass')
     graph.append('[framed]'+','.join(filters)+'[final]')
     script=target/'filters.txt'; script.write_text(';\n'.join(graph),encoding='utf-8')
-    cmd=['ffmpeg','-v','error','-y','-threads','2','-i',str(Path(path).resolve()),'-filter_complex_threads','1',filter_file_option(),str(script),'-map','[final]']
+    cmd=['ffmpeg','-v','error','-y','-threads','2','-ss',str(start),'-t',str(end-start),'-i',str(Path(path).resolve()),'-filter_complex_threads','1',filter_file_option(),str(script),'-map','[final]']
     if info['audio']: cmd+=['-map','[sound]','-c:a','aac','-b:a','160k']
     cmd+=['-c:v','libx264','-preset',edit.preset,'-crf','20','-pix_fmt','yuv420p','-movflags','+faststart',str(target/'editado.mp4')]
     progress('Codificando video con FFmpeg…')
     # Cambiar cwd global rompería otros trabajos; subprocess aislado.
     import subprocess
     try:
-        p=subprocess.run(cmd,cwd=target,capture_output=True,timeout=7200)
+        p=subprocess.run(cmd,cwd=target,capture_output=True,timeout=max(7200,int(duration*8+600)))
         if p.returncode: raise RuntimeError(p.stderr.decode('utf-8',errors='replace')[-3500:])
     except Exception:
         (target/'editado.mp4').unlink(missing_ok=True)

@@ -4,7 +4,7 @@ MODELS = ['tiny','base','small','medium']
 _CUDA_FAILURE = None
 
 
-def _once(samples, model, device, language):
+def _once(samples, model, device, language,notify=lambda message:None):
     from .gpu_runtime import prepare_libraries
     if device=='cuda': prepare_libraries()
     from faster_whisper import WhisperModel
@@ -14,8 +14,12 @@ def _once(samples, model, device, language):
         engine = WhisperModel(model, device=device, compute_type='int8_float16' if device=='cuda' else 'int8')
         segments, info = engine.transcribe(samples, language=language or None, word_timestamps=True, vad_filter=True, beam_size=1 if device=='cpu' else 3)
         result=[]
+        reported=-10.
         # Whisper es perezoso: una DLL puede fallar al iterar, no al construir.
         for s in segments:
+            if float(s.end)-reported>=10:
+                notify(f'Transcripción en {device.upper()}: {float(s.end)/60:.1f} min leídos del bloque')
+                reported=float(s.end)
             result.append(dict(start=float(s.start),end=float(s.end),text=s.text.strip(),
                 words=[dict(start=float(w.start),end=float(w.end),text=w.word.strip()) for w in (s.words or [])]))
         return result, dict(device=device,language=info.language)
@@ -60,7 +64,7 @@ def transcribe(samples, model='small', device='auto', language=None, progress=la
     if use_cuda:
         progress('Transcribiendo con la GPU…')
         try:
-            result,metadata=_once(samples,model,'cuda',language)
+            result,metadata=_once(samples,model,'cuda',language,progress)
             metadata['requested_device']=device
             return result,metadata
         except Exception as e:
@@ -69,7 +73,7 @@ def transcribe(samples, model='small', device='auto', language=None, progress=la
             # _once ya cerró el generador y liberó el modelo antes del reintento.
     progress(warning or 'Transcribiendo en CPU…')
     try:
-        result,metadata=_once(samples,model,'cpu',language)
+        result,metadata=_once(samples,model,'cpu',language,progress)
     except Exception as e:
         detail=f' GPU: {_CUDA_FAILURE}.' if warning else ''
         raise RuntimeError(f'No se pudo transcribir en CPU: {e}.{detail} El bloque no se guardó como terminado; puedes reintentarlo.') from e

@@ -45,3 +45,7 @@ def preview(path, start, end, output):
         return output
     finally:
         temp.unlink(missing_ok=True)
+
+
+def frame(path,time,width=960):
+    return run(['ffmpeg','-v','error','-ss',time,'-i',path,'-frames:v','1','-vf',f'scale={width}:-2','-f','image2pipe','-vcodec','png','pipe:1'])

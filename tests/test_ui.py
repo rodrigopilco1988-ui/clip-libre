@@ -27,6 +27,7 @@ def test_ui_preview_and_export(video,tmp_path,monkeypatch):
     payload=dict(segments=[dict(start=1.,end=4.,text='Prueba autorizada',words=words)],audio=[],visual=[])
     s.save_chunk(sid,'a',0,8,'cfg',payload,[dict(start=1.,end=6.,score=55,title='Prueba',hook='Hola',reason='Prueba',classification='heurística',visual_samples=1,words=words)])
     app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(b for b in app.button if b.label=='Elegir y editar').click().run()
     next(x for x in app.selectbox if x.label=='Resolución base').select(360).run()
     next(b for b in app.button if b.label=='Generar vista previa editada').click().run(timeout=30)
     assert not app.exception and not app.error
@@ -56,8 +57,54 @@ def test_view_clip_button_and_persistent_open_state(video,tmp_path,monkeypatch):
     s=Store(tmp_path/'view-regression'); sid=s.register(video)
     s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),[dict(start=1.,end=4.,score=60,title='Clip de prueba',reason='Prueba',classification='heurística',visual_samples=1,words=[])])
     app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    app.session_state['workflow']='3 · Mis clips'
+    app.run()
     next(b for b in app.button if b.label=='Ver clip').click().run(timeout=30)
     assert not app.exception and not app.error
     assert list((tmp_path/'view-regression'/'vistas_previas').glob('*.mp4'))
     next(x for x in app.slider if x.label=='Puntuación mínima').set_value(10).run(timeout=30)
     assert not app.exception and not app.error
+
+
+def test_select_clip_goes_to_editor_and_panels_can_be_added(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'editor'))
+    s=Store(tmp_path/'editor'); sid=s.register(video)
+    s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),[dict(start=1.,end=6.,score=55,title='Prueba',reason='Prueba',classification='heurística',visual_samples=1,words=[])])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    assert not any(x.label=='Resolución base' for x in app.selectbox)
+    next(b for b in app.button if b.label=='Elegir y editar').click().run()
+    assert not app.exception and app.session_state['workflow']=='4 · Editor y exportación'
+    assert next(x for x in app.selectbox if x.label=='Formato').value=='9:16'
+    assert any(x.label=='Inicio del clip (min)' for x in app.number_input)
+    next(b for b in app.button if b.label=='Añadir cuadro').click().run()
+    assert not app.exception
+    assert next(x for x in app.selectbox if x.label=='Número de cuadros').value==2
+    next(b for b in app.button if b.label=='Añadir cuadro').click().run()
+    assert next(x for x in app.selectbox if x.label=='Número de cuadros').value==3
+    next(b for b in app.button if b.label=='Quitar último cuadro').click().run()
+    assert not app.exception and next(x for x in app.selectbox if x.label=='Número de cuadros').value==2
+
+
+def test_minutes_and_full_content_are_defaults(tmp_path,monkeypatch):
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'defaults'))
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    assert next(x for x in app.checkbox if x.label=='Analizar todo el contenido importado').value
+    assert next(x for x in app.checkbox if x.label=='Sin límite máximo de duración del clip').value
+    assert next(x for x in app.number_input if x.label=='Duración orientativa del clip (min)').value==3.
+
+
+def test_editor_settings_and_text_are_saved(video,tmp_path,monkeypatch):
+    from cliplivre.store import Store
+    monkeypatch.setenv('CLIP_LIBRE_DATA',str(tmp_path/'save-editor'))
+    s=Store(tmp_path/'save-editor'); sid=s.register(video)
+    s.save_chunk(sid,'a',0,8,'cfg',dict(segments=[],audio=[],visual=[]),[dict(start=1.,end=6.,score=55,title='Prueba',reason='Prueba',classification='heurística',visual_samples=1,words=[])])
+    app=AppTest.from_file(str(Path(__file__).parents[1]/'app.py')).run(timeout=30)
+    next(b for b in app.button if b.label=='Elegir y editar').click().run()
+    next(x for x in app.text_area if x.label=='Texto sobre el video').set_value('Mi título nuevo').run()
+    next(b for b in app.button if b.label=='Añadir cuadro').click().run()
+    next(b for b in app.button if b.label=='Guardar revisión y configuración').click().run()
+    assert not app.exception and not app.error
+    saved=s.candidates(sid)[0]
+    assert saved['edit_settings']['overlay_text']=='Mi título nuevo'
+    assert len(saved['edit_settings']['panels'])==2
