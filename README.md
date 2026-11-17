@@ -1,6 +1,14 @@
-# Clip Libre · 0.5.0
+# Clip Libre · 0.6.0
 
 Estudio local para generar, revisar y editar clips. Interfaz original en español, sin créditos, suscripciones ni APIs de IA de pago. Usa únicamente material con acceso y permiso de reutilización.
+
+## Vista previa corregida y modo Ultrarrápido (0.6.0)
+
+**Ver clip** crea un MP4 horizontal corto del tramo elegido, con salto directo al inicio. Lo guarda y reutiliza al abrirlo de nuevo. El reproductor usa una barra relativa al clip: **0:00 / 1:20**, aunque la fuente dure siete horas. La tarjeta muestra **Duración: 1:20** y por separado la posición en el directo, en min:seg u horas:min:seg. El original se conserva completo y la exportación sigue recortando el intervalo.
+
+**Velocidad → Ultrarrápido** detecta candidatos por energía/cambios de audio y cambios visuales sin transcribir todo el directo. Es la opción inicial para proyectos nuevos; los proyectos anteriores conservan su modo hasta que lo cambies. Los títulos son genéricos y requieren revisión: tiene menos contexto de conversaciones, humor y diálogos. No interpreta semánticamente imágenes. Elige un candidato, abre el editor y pulsa **Generar / actualizar subtítulos** para transcribir solo ese clip. Los modos **Rápido, Equilibrado y Calidad alta** conservan el análisis con transcripción completa.
+
+Ensayo local con video sintético autorizado de 10 minutos, sin descarga: tres ejecuciones de detección Ultrarrápida **0,687 / 0,867 / 0,734 s**, mediana **0,734 s**. Se propusieron seis clips de 30,03 a 81 s. La vista previa de un candidato de 81 s tardó **2,001 s** y transcribirlo después con Tiny CPU tardó **4,041 s**, con pesos ya disponibles. La mejora procede de diferir la transcripción del directo: la clasificación inicial tiene menos información. No garantiza ese tiempo en streams reales ni incluye descargar la fuente. Pruebas y límites en docs/VALIDACION.md.
 
 ## Rendimiento en 0.5.0
 
@@ -54,7 +62,7 @@ También puedes cerrar la aplicación y ejecutar **RepararGPU.bat**, sin escribi
 
 **Rápido** usa Tiny; **Equilibrado**, Small; **Calidad alta**, Medium. Base y el procesador se eligen en Más opciones. La primera descarga del modelo tarda más. Tiny prioriza tiempo y puede transcribir peor.
 
-La reproducción y el recorte interactivo leen el archivo por rangos, sin recodificarlo entero ni cargarlo completo en memoria. Cambiar límites de clips reutiliza transcripciones compatibles, incluso de bloques previos que cubren el intervalo nuevo. No vuelve a descargar un VOD idéntico ya importado si el archivo existe. El análisis visual rápido trabaja en paralelo con la transcripción. El render final y los efectos aún requieren FFmpeg. La codificación final prueba NVENC cuando está disponible.
+La reproducción de la fuente y el recorte interactivo leen por rangos. La galería prepara un archivo corto solo al pulsar Ver clip y lo reutiliza; no recodifica el directo entero. Cambiar límites de clips reutiliza transcripciones compatibles, incluso de bloques previos que cubren el intervalo nuevo. No vuelve a descargar un VOD idéntico ya importado si el archivo existe. El análisis visual rápido trabaja en paralelo con la transcripción. El render final y los efectos aún requieren FFmpeg. La codificación final prueba NVENC cuando está disponible.
 
 Ensayo real de navegador con 10 minutos de video sintético autorizado repetido: ocho clips entre 38,74 y 76,90 s en 20,79 s con Tiny CPU y pesos previamente descargados. No equivale a un directo real ni garantiza ese tiempo en otro equipo. No se dispone aquí de una RTX 3060 física para certificar aceleración. El botón de prueba CUDA comprueba tu equipo sin sustituir CPU por un éxito ficticio.
 

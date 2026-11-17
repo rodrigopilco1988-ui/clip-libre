@@ -222,3 +222,37 @@ La reimportación de un VOD disponible en disco comprueba caché antes de consul
 Chromium real abrió un candidato ya analizado, verificó Rápida inicialmente y exportó con los controles de la app. Archivo real, preset ultrafast, encuadre paneles con zoom 1, codificador efectivo libx264, sin excepción Streamlit ni errores JS registrados. Tiempo observado 9,751 s desde el clic hasta registrar la exportación. Captura exportacion-0.5.0.png e informe browser-0.5.0.json. No es tiempo de análisis ni de descarga.
 
 CI final: **86 aprobadas en Windows (29,06 s)**; **83 aprobadas y 3 omitidas en Linux (33,22 s)**. Instalar.bat, RepararGPU.bat y pip check terminaron correctamente; carga de DLL NVIDIA sin errores ni bibliotecas ausentes. Esto no demuestra inferencia CUDA ni NVENC en GPU física. Registro ci-0.5.0.txt.
+
+## Versión 0.6.0: vista previa corta y detección Ultrarrápida
+
+Código final: `3242eef7c77457fa258417b463782fd3e5169a6d`.
+CI final: https://github.com/rodrigopilco1988-ui/clip-libre/actions/runs/44020050161
+
+Prueba local completa: **88 aprobadas y 3 omitidas específicas de Windows en 49,38 s**.
+
+### Corrección de Ver clip
+
+La versión anterior servía el video original al reproductor y detenía la reproducción en el límite. El control nativo seguía mostrando la duración total del original. Una tarjeta con 1,33 minutos decimales representa unos 80 segundos, pero el reproductor de siete horas daba una impresión distinta. Se sustituye por un MP4 horizontal real del tramo, generado a demanda con seek directo, 640 píxeles de ancho, 24 fps, ultrafast, audio y caché por identidad/tamaño/mtime/intervalo. La primera apertura requiere renderizar solo ese tramo; las siguientes reutilizan el archivo. No se preparan todas las vistas previas al generar candidatos.
+
+La barra del reproductor de clips usa tiempos relativos y limita la búsqueda y reproducción al tramo. La tarjeta presenta Duración en min:seg y la posición de origen por separado. La vista general de la fuente conserva su reproductor completo. No se cambia ni elimina el original. Los límites 30–90 s de candidatos y la exportación recortada se mantienen.
+
+Prueba real Chromium con fuente propia sintética de **26574 s (7:22:54)**, color estático 160×90 a 1 fps, sin audio, creada con FFmpeg. Candidato predefinido de **7882 a 7962 s**, duración 80 s, para probar interfaz y recorte sin atribuir detección semántica. Se abrió Ver clip, se esperó decodificación, se comprobó **duración física del MP4 80 s**, barra máxima 80, texto **0:00 / 1:20**, reproducción y detención al llegar al final. Sin excepción Streamlit ni errores JavaScript registrados. Informe browser-0.6.0.json y captura vista-corta-0.6.0.png.
+
+Pruebas automatizadas: duración real del archivo corto, reutilización sin render repetido, estado del botón al cambiar filtros, subtítulos/audio/exportación de las rutas existentes, controles relativos y restricciones de búsqueda del HTML. No se afirma que toda copia de un contenedor dure exactamente al milisegundo; se permite el margen de fotograma/audio del codificador.
+
+### Detección Ultrarrápida
+
+Nuevo modo visible e inicial para proyectos nuevos. Extrae audio y usa energía/cambios acústicos y muestreo visual, sin cargar Whisper para todo el directo. Las propuestas iniciales no tienen transcripción ni interpretación semántica; usan títulos genéricos de revisión. Los límites y la variación de duración se aplican a candidatos sin diálogo. El editor conserva el botón para generar subtítulos solo del candidato elegido. Los modos de transcripción completa siguen disponibles y los proyectos anteriores conservan sus preferencias.
+
+Caché audio-only separada: un bloque sin transcribir no se guarda como ASR completo, y no se migra a ASR completo por accidente. Tests prohíben llamar al transcriptor en ese modo, comprueban el espacio de caché, duración/variación e incremental sin repetir bloques. Una selección de Ollama sin evidencia textual no fabrica contexto.
+
+Ensayo con fuente sintética propia autorizada de **600,03 s**, repetida desde examples/autorizado.mp4, sin descarga y sin otro benchmark concurrente: **0,687 / 0,867 / 0,734 s**, mediana **0,734 s**. Seis candidatos: **81, 75, 81, 48, 69 y 30,03 s**, todos 30–90 s. RSS muestreada al final entre **55,6 y 56,0 MB**, no máximo del sistema ni de los procesos hijos. Vista previa real de 81 s: **2,001 s**, 640×360, audio conservado. Transcripción posterior de ese clip: **4,041 s**, Tiny CPU, 223 palabras, pesos previamente descargados. Informe ultra-benchmark-0.6.0.json.
+
+Estos tiempos corresponden a detección audiovisual con menos información que el análisis completo. Diferir ASR cambia las posibilidades de clasificar humor/conversación; no se afirma calidad semántica equivalente. Descargar una fuente larga sigue costando tiempo y espacio. No se garantiza menos de dos minutos para cualquier stream. RTX/NVENC físico, descarga real YouTube/Twitch e inferencia Ollama siguen sin validación nueva.
+
+
+Regresiones adicionales: la migración de transcripciones antiguas rechaza expresamente config.transcription=false; no trata los bloques de solo audio como transcripción terminada. El selector del editor usa etiquetas únicas (número + duración + título) para evitar que títulos genéricos repetidos cambien el candidato al enviar otro control. AppTest verifica selección y guardado de subtítulos con títulos duplicados.
+
+Segundo flujo real Chromium: proyecto de 10 minutos, modo Ultrarrápido, Generar clips con reutilización de análisis de audio ya almacenado, Elegir y editar y Generar / actualizar subtítulos. Se transcribió únicamente el candidato **494–563 s (69 s)** y se guardaron **192 palabras** dentro de ese intervalo. Se comprobó ausencia de excepción Streamlit. Informe ultra-editor-0.6.0.json. Este segundo flujo comprueba la integración de UI, no mide la primera detección; los tiempos de detección provienen del ensayo independiente descrito antes.
+
+CI final 0.6.0: **91 aprobadas en Windows (39,72 s)**; **88 aprobadas y 3 omitidas específicas de Windows en Linux (35,73 s)**. Instalar.bat, RepararGPU.bat y pip check correctos; bibliotecas NVIDIA cargadas sin errores ni ausencias. El runner no tiene GPU física: esto no certifica inferencia CUDA/NVENC. Registro ci-0.6.0.txt.
