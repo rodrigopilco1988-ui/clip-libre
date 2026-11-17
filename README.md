@@ -1,6 +1,16 @@
-# Clip Libre · 0.4.1
+# Clip Libre · 0.5.0
 
 Estudio local para generar, revisar y editar clips. Interfaz original en español, sin créditos, suscripciones ni APIs de IA de pago. Usa únicamente material con acceso y permiso de reutilización.
+
+## Rendimiento en 0.5.0
+
+- **Generar clips → Rápido** usa Tiny con transcripción por lotes: 4 en CPU y 8 en CUDA. Conserva marcas por palabra; los resultados pueden diferir ligeramente del modo secuencial. Se mantienen Small/Medium y los ajustes avanzados.
+- **Velocidad de exportación → Rápida** está visible en el editor y es la opción inicial para clips nuevos. Usa menor compresión para reducir espera: archivos más grandes, misma resolución. Puedes elegir Equilibrada o Mayor compresión; se respetan los ajustes guardados.
+- **Codificador automático** prueba una codificación NVENC real, no solo la presencia de una tarjeta. Usa NVIDIA si pasa; si falla durante el clip, elimina el parcial y reintenta en CPU. CUDA/Whisper y NVENC son rutas independientes: que una funcione no demuestra que la otra funcione. Los filtros siguen en CPU.
+- El encuadre de un solo cuadro evita la composición y el escalado redundantes. Se mantienen varios cuadros, subtítulos, audio y formatos.
+- Encuadre fijo y zoom desactivado inicialmente. Si activas seguimiento facial, ignora pequeños temblores y limita el desplazamiento para evitar saltos bruscos. El movimiento que ya existe dentro del video original no se estabiliza.
+
+Mediciones CPU con fuente sintética autorizada, sin descarga y con pesos disponibles: análisis de 10 minutos, mediana **18,04 → 14,82 s**; exportación rápida de 15 s a 1080×1920, mediana **8,65 → 2,49 s**, con archivo mayor. Un clip de 49,6 s con subtítulos se exportó en **9,22 s**. No son tiempos garantizados para streams reales o para tu equipo; descargar la fuente tarda aparte. Aceleración NVENC y lotes CUDA pendientes de medir en una RTX física. Informes en docs/VALIDACION.md.
 
 ## Si pegas un canal de Twitch
 
@@ -43,11 +53,11 @@ También puedes cerrar la aplicación y ejecutar **RepararGPU.bat**, sin escribi
 
 **Rápido** usa Tiny; **Equilibrado**, Small; **Calidad alta**, Medium. Base y el procesador se eligen en Más opciones. La primera descarga del modelo tarda más. Tiny prioriza tiempo y puede transcribir peor.
 
-La reproducción y el recorte interactivo leen el archivo por rangos, sin recodificarlo entero ni cargarlo completo en memoria. Cambiar límites de clips reutiliza transcripciones compatibles, incluso de bloques previos que cubren el intervalo nuevo. No vuelve a descargar un VOD idéntico ya importado si el archivo existe. El análisis visual rápido trabaja en paralelo con la transcripción. El render final y los efectos aún requieren FFmpeg.
+La reproducción y el recorte interactivo leen el archivo por rangos, sin recodificarlo entero ni cargarlo completo en memoria. Cambiar límites de clips reutiliza transcripciones compatibles, incluso de bloques previos que cubren el intervalo nuevo. No vuelve a descargar un VOD idéntico ya importado si el archivo existe. El análisis visual rápido trabaja en paralelo con la transcripción. El render final y los efectos aún requieren FFmpeg. La codificación final prueba NVENC cuando está disponible.
 
 Ensayo real de navegador con 10 minutos de video sintético autorizado repetido: ocho clips entre 38,74 y 76,90 s en 20,79 s con Tiny CPU y pesos previamente descargados. No equivale a un directo real ni garantiza ese tiempo en otro equipo. No se dispone aquí de una RTX 3060 física para certificar aceleración. El botón de prueba CUDA comprueba tu equipo sin sustituir CPU por un éxito ficticio.
 
-Si falla CUDA, la app informa del cambio a CPU y conserva el progreso; CPU puede tardar más. Usa el apartado lateral de reparación NVIDIA. FFmpeg/libx264, OpenCV y el audio siguen en CPU. Los análisis se guardan por bloques en SQLite y se reanudan desde los bloques confirmados.
+Si falla CUDA, la app informa del cambio a CPU y conserva el progreso; CPU puede tardar más. Usa el apartado lateral de reparación NVIDIA. Los filtros de FFmpeg, OpenCV y el audio siguen en CPU; la codificación prueba NVENC y utiliza libx264 si no está disponible. Los análisis se guardan por bloques en SQLite y se reanudan desde los bloques confirmados.
 
 ## Fuentes y directos
 

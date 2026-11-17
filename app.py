@@ -363,7 +363,7 @@ with tabs[0]:
                     raise ValueError('El tramo dura '+clock(window_length)+' y el mínimo elegido es '+clock(clip_min)+'. Elige una duración menor para generar clips.')
                 bar=st.progress(0.)
                 def update(f,m): bar.progress(max(0.,min(1.,f))); status.update(label=m)
-                config=Analysis(model=({'Rápido':'tiny','Equilibrado':'small','Calidad alta':'medium'}[speed] if override_model=='Según velocidad' else override_model),device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=clip_min,max_seconds=clip_max,target_seconds=(clip_min+clip_max)/2 if clip_max is not None else max(clip_min,180),duration_variation=True,visual_step=8 if speed=='Rápido' else 2,visual_fast=speed=='Rápido',source_start=analysis_start,source_end=analysis_end)
+                config=Analysis(fast_asr=speed=='Rápido',model=({'Rápido':'tiny','Equilibrado':'small','Calidad alta':'medium'}[speed] if override_model=='Según velocidad' else override_model),device=device,language='' if language=='auto' else language,ollama=use_ollama,ollama_model=ollama_model,min_seconds=clip_min,max_seconds=clip_max,target_seconds=(clip_min+clip_max)/2 if clip_max is not None else max(clip_min,180),duration_variation=True,visual_step=8 if speed=='Rápido' else 2,visual_fast=speed=='Rápido',source_start=analysis_start,source_end=analysis_end)
                 report=analyze(store,new_sid,config,update)
                 status.update(label='Clips listos',state='complete')
             st.session_state['pending_project']=new_sid
@@ -545,6 +545,8 @@ if sid:
                         edited=st.data_editor(words or [dict(start=start,end=min(end,start+1),text='')],num_rows='dynamic',key='words_'+cid,width='stretch')
                 with st.expander('Más ajustes de encuadre y efectos'):
                     resolution=st.selectbox('Resolución base',[1080,720,360],index=[1080,720,360].index(saved.get('resolution',1080)))
+                    encoder=st.selectbox('Codificador',['auto','cpu','nvidia'],index=['auto','cpu','nvidia'].index(saved.get('encoder','auto')),format_func=lambda x:{'auto':'Automático: NVIDIA si pasa la prueba','cpu':'CPU','nvidia':'Probar NVIDIA; CPU si falla'}[x])
+                    st.caption('Encuadre fijo y zoom desactivado inicialmente. NVENC acelera la codificación cuando funciona; los filtros aún usan CPU.')
                     framing=st.selectbox('Encuadre',['paneles','ajustar','centro','rostros','streamer'],format_func=lambda f:{'paneles':'Cuadros arrastrables','ajustar':'Todo con bandas','centro':'Recortar al centro','rostros':'Seguimiento aproximado de rostros','streamer':'Gameplay + cámara'}[f])
                     cx=st.slider('Centro horizontal',0.,1.,.5); cy=st.slider('Centro vertical',0.,1.,.5)
                     roi=None
@@ -575,7 +577,9 @@ if sid:
                             for panel in new_panels: validate_panel(panel)
                             panels=new_panels; st.session_state[composition_key]=panels; st.session_state[revision_key]=crop['revision']
                     st.caption('Vista interactiva inmediata. Para comprobar cortes, animación y el resultado exacto, usa Vista previa editada.')
-                edit=Edit(aspect=aspect,resolution=resolution,framing=framing,center_x=cx,center_y=cy,zoom=zoom,fade=fade,burn=burn,animated=animated,font=font,font_size=sub_size,color=sub_color.lstrip('#'),subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],streamer_roi=roi,panels=panels,photo_path=photo_path if layout=='Foto + clip' else None,logo_path=logo_path,titles=titles)
+                export_speed=st.selectbox('Velocidad de exportación',['Rápida','Equilibrada','Mayor compresión'],index=['ultrafast','veryfast','medium'].index(saved.get('preset','ultrafast')) if saved.get('preset','ultrafast') in ['ultrafast','veryfast','medium'] else 0)
+                st.caption('Rápida reduce la espera y genera archivos más grandes. No cambia la resolución elegida.')
+                edit=Edit(aspect=aspect,resolution=resolution,framing=framing,center_x=cx,center_y=cy,zoom=zoom,fade=fade,burn=burn,animated=animated,font=font,font_size=sub_size,color=sub_color.lstrip('#'),subtitle_position={'Abajo':2,'Centro':5,'Arriba':8}[position],streamer_roi=roi,panels=panels,photo_path=photo_path if layout=='Foto + clip' else None,logo_path=logo_path,titles=titles,encoder=encoder,preset={'Rápida':'ultrafast','Equilibrada':'veryfast','Mayor compresión':'medium'}[export_speed])
                 missing_photo=layout=='Foto + clip' and not photo_path
                 if st.button('Guardar revisión y configuración',disabled=missing_photo):
                     try:

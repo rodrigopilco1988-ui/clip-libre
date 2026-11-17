@@ -1,0 +1,41 @@
+{
+  "duration": 15,
+  "resolution": "1080x1920",
+  "encoder": "CPU libx264",
+  "results": [
+    {
+      "version": "anterior",
+      "seconds": 9.1893,
+      "size_bytes": 2956994
+    },
+    {
+      "version": "nuevo",
+      "seconds": 2.515,
+      "size_bytes": 8440047
+    },
+    {
+      "version": "anterior",
+      "seconds": 8.6493,
+      "size_bytes": 2956947
+    },
+    {
+      "version": "nuevo",
+      "seconds": 2.3577,
+      "size_bytes": 8440047
+    },
+    {
+      "version": "anterior",
+      "seconds": 8.5278,
+      "size_bytes": 2956947
+    },
+    {
+      "version": "nuevo",
+      "seconds": 2.4946,
+      "size_bytes": 8440047
+    }
+  ],
+  "medians": {
+    "anterior": 8.6493,
+    "nuevo": 2.4946
+  }
+}

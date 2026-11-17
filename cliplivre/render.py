@@ -43,6 +43,7 @@ class Edit:
     photo_path: str | None = None
     logo_path: str | None = None
     titles: list | None = None
+    encoder: str = 'auto'
 
 
 def retained(start,end,cuts):
@@ -66,17 +67,27 @@ def dimensions(aspect,resolution):
     return round(resolution*16/9)//2*2,resolution
 
 
-def face_expression(frames,intervals,width):
-    points=[]; offset=0.; last=.5
+def face_track(frames,intervals):
+    """Centro estable: ignora temblores pequeños y limita desplazamiento por segundo."""
+    points=[(0.,.5)]; offset=0.; last=.5; previous_time=0.
     for a,b in intervals:
         for f in frames:
             if a<=f['time']<b and f['faces']:
-                # Continuidad espacial; no identifica personas ni atribuye quién habla.
+                t=offset+f['time']-a
                 face=min(f['faces'],key=lambda r:abs(r[0]+r[2]/2-last))
                 target=face[0]+face[2]/2
-                last=.7*last+.3*target
-                points.append((offset+f['time']-a,last))
+                delta=target-last
+                if abs(delta)>.035:
+                    step=.025*min(2.,max(0.,t-previous_time))
+                    last+=max(-step,min(step,delta*.3))
+                if t>points[-1][0]: points.append((t,last))
+                previous_time=t
         offset+=b-a
+    return points
+
+
+def face_expression(frames,intervals,width):
+    points=face_track(frames,intervals)
     points=points[:120]
     if not points: return '(iw-ow)/2'
     expr=str(round(points[-1][1],4))
@@ -108,19 +119,26 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     if edit.framing=='paneles':
         panels=edit.panels
         if not panels or not 1<=len(panels)<=3: raise ValueError('Elige entre uno y tres cuadros.')
-        video_panels=[i for i,p in enumerate(panels) if p.get('kind')!='image']
-        graph.append(frame+f'split={len(video_panels)+1}[canvas_source]'+''.join(f'[panel{i}]' for i in video_panels))
-        graph.append(f'[canvas_source]scale={w}:{h},drawbox=color=black:t=fill,setsar=1[canvas0]')
-        for i,panel in enumerate(panels):
-            validate_panel(panel)
-            sx,sy,sw,sh=panel['source']; dx,dy,dw,dh=geometry(panel,w,h)
-            if panel.get('fit','cover')=='cover': fit=f'scale={dw}:{dh}:force_original_aspect_ratio=increase,crop={dw}:{dh}'
-            else: fit=f'scale={dw}:{dh}:force_original_aspect_ratio=decrease,pad={dw}:{dh}:(ow-iw)/2:(oh-ih)/2'
-            panel_input='[1:v]' if panel.get('kind')=='image' else f'[panel{i}]'
-            if panel.get('kind')=='image' and not edit.photo_path: raise ValueError('Añade una foto para Foto + clip.')
-            graph.append(f'{panel_input}crop=iw*{sw}:ih*{sh}:iw*{sx}:ih*{sy},{fit},setsar=1[layer{i}]')
-            graph.append(f'[canvas{i}][layer{i}]overlay=x={dx}:y={dy}:shortest=1[canvas{i+1}]')
-        graph.append(f'[canvas{len(panels)}]null[framed]')
+        single=len(panels)==1 and panels[0].get('kind')!='image' and geometry(panels[0],w,h)==(0,0,w,h)
+        if single:
+            panel=panels[0]; validate_panel(panel)
+            sx,sy,sw,sh=panel['source']
+            fit=f'scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}' if panel.get('fit','cover')=='cover' else f'scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2'
+            graph.append(f'{frame}crop=iw*{sw}:ih*{sh}:iw*{sx}:ih*{sy},{fit},setsar=1[framed]')
+        else:
+            video_panels=[i for i,p in enumerate(panels) if p.get('kind')!='image']
+            graph.append(frame+f'split={len(video_panels)+1}[canvas_source]'+''.join(f'[panel{i}]' for i in video_panels))
+            graph.append(f'[canvas_source]scale={w}:{h},drawbox=color=black:t=fill,setsar=1[canvas0]')
+            for i,panel in enumerate(panels):
+                validate_panel(panel)
+                sx,sy,sw,sh=panel['source']; dx,dy,dw,dh=geometry(panel,w,h)
+                if panel.get('fit','cover')=='cover': fit=f'scale={dw}:{dh}:force_original_aspect_ratio=increase,crop={dw}:{dh}'
+                else: fit=f'scale={dw}:{dh}:force_original_aspect_ratio=decrease,pad={dw}:{dh}:(ow-iw)/2:(oh-ih)/2'
+                panel_input='[1:v]' if panel.get('kind')=='image' else f'[panel{i}]'
+                if panel.get('kind')=='image' and not edit.photo_path: raise ValueError('Añade una foto para Foto + clip.')
+                graph.append(f'{panel_input}crop=iw*{sw}:ih*{sh}:iw*{sx}:ih*{sy},{fit},setsar=1[layer{i}]')
+                graph.append(f'[canvas{i}][layer{i}]overlay=x={dx}:y={dy}:shortest=1[canvas{i+1}]')
+            graph.append(f'[canvas{len(panels)}]null[framed]')
     elif edit.framing=='streamer':
         roi=edit.streamer_roi
         if not roi or len(roi)!=4 or any(not 0<=v<=1 for v in roi) or roi[2]<=0 or roi[3]<=0 or roi[0]+roi[2]>1 or roi[1]+roi[3]>1:
@@ -166,16 +184,25 @@ def render(path,start,end,words,output_root,edit=None,cuts=(),progress=lambda _:
     if edit.logo_path: cmd+=['-loop','1','-i',str(Path(edit.logo_path).resolve())]
     cmd+=['-filter_complex_threads','1',filter_file_option(),str(script),'-map','[final]']
     if info['audio']: cmd+=['-map','[sound]','-c:a','aac','-b:a','160k']
-    cmd+=['-c:v','libx264','-preset',edit.preset,'-crf','20','-pix_fmt','yuv420p','-movflags','+faststart',str(target/'editado.mp4')]
-    progress('Codificando video con FFmpeg…')
+    from .encoding import choose_encoder,encoder_options
+    encoder=choose_encoder(edit.encoder)
+    base_cmd=list(cmd)
+    ending=['-pix_fmt','yuv420p','-movflags','+faststart',str(target/'editado.mp4')]
+    cmd=base_cmd+encoder_options(encoder,edit.preset)+ending
+    progress('Exportando con NVIDIA NVENC…' if encoder=='h264_nvenc' else 'Exportando en CPU con FFmpeg…')
     # Cambiar cwd global rompería otros trabajos; subprocess aislado.
     import subprocess
     try:
         p=subprocess.run(cmd,cwd=target,capture_output=True,timeout=max(7200,int(duration*8+600)))
+        if p.returncode and encoder=='h264_nvenc':
+            progress('NVENC no pudo exportar este clip; reintentando en CPU…')
+            (target/'editado.mp4').unlink(missing_ok=True)
+            encoder='libx264'
+            p=subprocess.run(base_cmd+encoder_options(encoder,edit.preset)+ending,cwd=target,capture_output=True,timeout=max(7200,int(duration*8+600)))
         if p.returncode: raise RuntimeError(p.stderr.decode('utf-8',errors='replace')[-3500:])
     except Exception:
         (target/'editado.mp4').unlink(missing_ok=True)
         raise
-    (target/'edicion.json').write_text(json.dumps(dict(edit=asdict(edit),intervals=intervals,source=str(path)),ensure_ascii=False,indent=2),encoding='utf-8')
+    (target/'edicion.json').write_text(json.dumps(dict(edit=asdict(edit),intervals=intervals,source=str(path),encoder_used=encoder),ensure_ascii=False,indent=2),encoding='utf-8')
     progress('Exportación terminada.')
     return target/'editado.mp4'

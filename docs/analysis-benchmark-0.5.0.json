@@ -1,0 +1,233 @@
+[
+  {
+    "fast": false,
+    "report": {
+      "session": "77f4c12e09b2449ba832f53395846289",
+      "blocks": 1,
+      "processed_until": 600.030355,
+      "elapsed_seconds": 18.97,
+      "rss_sampled_mb": 218.0,
+      "warnings": [],
+      "devices": [
+        "cpu"
+      ],
+      "cache_hits": 0,
+      "transcriptions_reused": 0,
+      "stage_seconds": {
+        "audio_transcription": 18.954,
+        "visual_wait": 0.002
+      },
+      "config": {
+        "block_minutes": 50,
+        "model": "tiny",
+        "device": "cpu",
+        "language": "en",
+        "ollama": false,
+        "ollama_model": "qwen3:4b",
+        "visual_step": 8,
+        "visual_fast": true,
+        "min_seconds": 30,
+        "max_seconds": 90,
+        "target_seconds": 60,
+        "max_candidates": 20,
+        "duration_variation": true,
+        "fast_asr": false,
+        "source_start": 0,
+        "source_end": null
+      }
+    },
+    "candidate_lengths": [
+      38.74,
+      76.86,
+      51.68,
+      65.96,
+      41.0,
+      76.9,
+      76.9,
+      51.84
+    ],
+    "words": 1327
+  },
+  {
+    "fast": true,
+    "report": {
+      "session": "90b972d18d83435ca31ce7cb1e3f507c",
+      "blocks": 1,
+      "processed_until": 600.030355,
+      "elapsed_seconds": 14.512,
+      "rss_sampled_mb": 297.9,
+      "warnings": [],
+      "devices": [
+        "cpu"
+      ],
+      "cache_hits": 0,
+      "transcriptions_reused": 0,
+      "stage_seconds": {
+        "audio_transcription": 14.501,
+        "visual_wait": 0.002
+      },
+      "config": {
+        "block_minutes": 50,
+        "model": "tiny",
+        "device": "cpu",
+        "language": "en",
+        "ollama": false,
+        "ollama_model": "qwen3:4b",
+        "visual_step": 8,
+        "visual_fast": true,
+        "min_seconds": 30,
+        "max_seconds": 90,
+        "target_seconds": 60,
+        "max_candidates": 20,
+        "duration_variation": true,
+        "fast_asr": true,
+        "source_start": 0,
+        "source_end": null
+      }
+    },
+    "candidate_lengths": [
+      49.59,
+      76.52,
+      51.56,
+      51.56,
+      51.56,
+      76.52,
+      51.56
+    ],
+    "words": 1129
+  },
+  {
+    "fast": false,
+    "report": {
+      "session": "7f69b96cce384353892133319a59d07f",
+      "blocks": 1,
+      "processed_until": 600.030355,
+      "elapsed_seconds": 17.104,
+      "rss_sampled_mb": 307.8,
+      "warnings": [],
+      "devices": [
+        "cpu"
+      ],
+      "cache_hits": 0,
+      "transcriptions_reused": 0,
+      "stage_seconds": {
+        "audio_transcription": 17.09,
+        "visual_wait": 0.002
+      },
+      "config": {
+        "block_minutes": 50,
+        "model": "tiny",
+        "device": "cpu",
+        "language": "en",
+        "ollama": false,
+        "ollama_model": "qwen3:4b",
+        "visual_step": 8,
+        "visual_fast": true,
+        "min_seconds": 30,
+        "max_seconds": 90,
+        "target_seconds": 60,
+        "max_candidates": 20,
+        "duration_variation": true,
+        "fast_asr": false,
+        "source_start": 0,
+        "source_end": null
+      }
+    },
+    "candidate_lengths": [
+      38.74,
+      76.86,
+      51.68,
+      65.96,
+      41.0,
+      76.9,
+      76.9,
+      51.84
+    ],
+    "words": 1327
+  },
+  {
+    "fast": true,
+    "report": {
+      "session": "3198df05dfeb468084fc8a0c616ae939",
+      "blocks": 1,
+      "processed_until": 600.030355,
+      "elapsed_seconds": 15.118,
+      "rss_sampled_mb": 362.9,
+      "warnings": [],
+      "devices": [
+        "cpu"
+      ],
+      "cache_hits": 0,
+      "transcriptions_reused": 0,
+      "stage_seconds": {
+        "audio_transcription": 15.106,
+        "visual_wait": 0.002
+      },
+      "config": {
+        "block_minutes": 50,
+        "model": "tiny",
+        "device": "cpu",
+        "language": "en",
+        "ollama": false,
+        "ollama_model": "qwen3:4b",
+        "visual_step": 8,
+        "visual_fast": true,
+        "min_seconds": 30,
+        "max_seconds": 90,
+        "target_seconds": 60,
+        "max_candidates": 20,
+        "duration_variation": true,
+        "fast_asr": true,
+        "source_start": 0,
+        "source_end": null
+      }
+    },
+    "candidate_lengths": [
+      49.59,
+      76.52,
+      51.56,
+      51.56,
+      51.56,
+      76.52,
+      51.56
+    ],
+    "words": 1129,
+    "export_seconds": 9.222,
+    "export_media": {
+      "duration": 49.6,
+      "width": 1080,
+      "height": 1920,
+      "audio": true
+    },
+    "repeat": {
+      "session": "b6cb6e230f204b4fb4cb91623fc931ae",
+      "blocks": 0,
+      "processed_until": 600.030355,
+      "elapsed_seconds": 0.002,
+      "rss_sampled_mb": 362.9,
+      "warnings": [],
+      "devices": [],
+      "cache_hits": 0,
+      "transcriptions_reused": 0,
+      "stage_seconds": {},
+      "config": {
+        "block_minutes": 50,
+        "model": "tiny",
+        "device": "cpu",
+        "language": "en",
+        "ollama": false,
+        "ollama_model": "qwen3:4b",
+        "visual_step": 8,
+        "visual_fast": true,
+        "min_seconds": 30,
+        "max_seconds": 90,
+        "target_seconds": 60,
+        "max_candidates": 20,
+        "duration_variation": true,
+        "fast_asr": true,
+        "source_start": 0,
+        "source_end": null
+      }
+    }
+  }
+]

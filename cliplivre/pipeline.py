@@ -23,6 +23,7 @@ class Analysis:
     target_seconds: float = 180
     max_candidates: int = 20
     duration_variation: bool = False
+    fast_asr: bool = False
     source_start: float = 0
     source_end: float | None = None
 
@@ -69,7 +70,7 @@ def analyze(store,sid,config=None,progress=lambda fraction,message:None,transcri
                         if transcriber:
                             segments,metadata=transcriber(samples,config.model,config.device,config.language)
                         else:
-                            segments,metadata=transcribe.transcribe(samples,config.model,config.device,config.language,progress=lambda m:progress((cursor-range_start)/(range_end-range_start),m))
+                            segments,metadata=transcribe.transcribe(samples,config.model,config.device,config.language,fast=config.fast_asr,progress=lambda m:progress((cursor-range_start)/(range_end-range_start),m))
                     else: segments,metadata=[],dict(device='sin audio')
                     for seg in segments:
                         seg['start']+=cursor; seg['end']+=cursor
